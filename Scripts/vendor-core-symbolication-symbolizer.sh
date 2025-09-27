@@ -18,7 +18,7 @@ set -eu
 here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 swift_root=${1:-$here/../../swift}
 backtracing_root="$swift_root"/stdlib/public/RuntimeModule
-prefix=${2:-SWIPR}
+# (no prefixes just yet) prefix=${2:-SWIPR}
 
 function die() {
     echo "ERROR: $*"

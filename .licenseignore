@@ -34,3 +34,6 @@ Dockerfile
 Snippets/*
 Misc/*
 Misc/Resources/*
+Scripts/*
+Sources/PprofFormat/profile.pb.swift
+.unacceptablelanguageignore
