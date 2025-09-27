@@ -57,13 +57,22 @@ struct ProfileRecorderMiniDemo: ParsableCommand & Sendable {
         if self.profilingServer {
             // We are using an unstructured `Task` here such that we can keep the main function synchronous
             // which makes some profiler demonstrations easier because we'll not immediately spawn more threads.
+            //
+            // In real code please just use
+            //
+            //   async let _ = ProfileRecorderServer(
+            //       configuration: try await .parseFromEnvironment()
+            //   ).runIgnoringFailures(logger: logger)
+            //
+            // at the beginning of your main function.
             profilingServerTask = Task {
                 async let _ = ProfileRecorderServer(
                     configuration: try await .parseFromEnvironment()
                 ).runIgnoringFailures(logger: logger)
-                async let _ = ProfileRecorderServer(
-                    configuration: try await .parseFromEnvironment()
-                ).runIgnoringFailures(logger: logger)
+                while !Task.isCancelled {
+                    // sleep until cancelled
+                    try? await Task.sleep(nanoseconds: 100_000_000_000)
+                }
             }
         }
         defer {
