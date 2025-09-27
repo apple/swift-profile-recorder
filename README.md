@@ -116,7 +116,11 @@ Below, some compatible visualisation tools:
 
 
 <details>
-<summary>Expand here to see `git diff -U1` onto [commit `97a09f0664679f017616a82894848b267c5e7068`](https://github.com/hummingbird-project/hummingbird-examples/commit/97a09f0664679f017616a82894848b267c5e7068)</summary>
+<summary>
+
+Expand here to see `git diff -U1` onto [commit `97a09f0664679f017616a82894848b267c5e7068`](https://github.com/hummingbird-project/hummingbird-examples/commit/97a09f0664679f017616a82894848b267c5e7068)
+
+</summary>
 
 ```diff
 diff --git a/hello/Package.swift b/hello/Package.swift
@@ -141,32 +145,6 @@ index 13131d9..95b114a 100644
 
 @@ -17,2 +18,5 @@ struct HummingbirdArguments: AsyncParsableCommand {
          )
-+        async let _ = ProfileRecorderServer(configuration: .parseFromEnvironment()).runIgnoringFailures(
-+            logger: app.logger
-+        )
-         try await app.runService()
-diff --git a/proxy-server/Package.swift b/proxy-server/Package.swift
-index f4cf65d..a75eee8 100644
---- a/proxy-server/Package.swift
-+++ b/proxy-server/Package.swift
-@@ -13,2 +13,3 @@ let package = Package(
-         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.6.0"),
-+        .package(url: "git@github.com:apple/swift-profile-recorder.git", branch: "main"),
-     ],
-@@ -22,2 +23,3 @@ let package = Package(
-                 .product(name: "NIOExtras", package: "swift-nio-extras"),
-+                .product(name: "ProfileRecorderServer", package: "swift-profile-recorder"),
-             ],
-diff --git a/proxy-server/Sources/App/app.swift b/proxy-server/Sources/App/app.swift
-index af7fcc0..b491db1 100644
---- a/proxy-server/Sources/App/app.swift
-+++ b/proxy-server/Sources/App/app.swift
-@@ -2,2 +2,3 @@ import ArgumentParser
- import Hummingbird
-+import ProfileRecorderServer
-
-@@ -19,2 +20,5 @@ struct HummingbirdArguments: AsyncParsableCommand, AppArguments {
-         let app = buildApplication(self)
 +        async let _ = ProfileRecorderServer(configuration: .parseFromEnvironment()).runIgnoringFailures(
 +            logger: app.logger
 +        )
