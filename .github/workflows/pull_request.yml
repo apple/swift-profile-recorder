@@ -10,6 +10,9 @@ jobs:
     uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
     with:
       license_header_check_project_name: "Swift Profile Recorder"
+      python_lint_check_enabled: false
+      docs_check_enabled: false
+      format_check_enabled: false
 
   unit-tests:
     name: Unit tests
