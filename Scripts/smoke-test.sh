@@ -13,12 +13,12 @@ mkdir -p "$output"
 
 socket_path="$tmpdir/swipr.sock"
 
-SWIPR_SAMPLING_SERVER_URL=unix://"$socket_path" \
+PROFILE_RECORDER_SERVER_URL=unix://"$socket_path" \
     "$tmpdir"/build/release/swipr-mini-demo \
     --blocking --burn-cpu --array-appends \
     --output "$output"/samples.swipr \
     --iterations 1000 \
-    --sampling-server &
+    --profiling-server &
 demo_pid=$!
 sleep 3
 

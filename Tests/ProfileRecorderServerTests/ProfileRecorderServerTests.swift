@@ -22,7 +22,7 @@ final class ProfileRecorderServerTests: XCTestCase {
         let server = ProfileRecorderServer(
             configuration: try ProfileRecorderServerConfiguration.makeTCPListener(host: "127.0.0.1", port: 0)
         )
-        try await server.withSamplingServer(logger: Logger(label: "")) { server in
+        try await server.withProfileRecordingServer(logger: Logger(label: "")) { server in
             guard case .successful(let serverAddress) = server.startResult else {
                 XCTFail("failed to start server")
                 return
@@ -42,7 +42,7 @@ final class ProfileRecorderServerTests: XCTestCase {
         let server = ProfileRecorderServer(
             configuration: try ProfileRecorderServerConfiguration.makeTCPListener(host: "127.0.0.1", port: 0)
         )
-        try await server.withSamplingServer(logger: Logger(label: "")) { server in
+        try await server.withProfileRecordingServer(logger: Logger(label: "")) { server in
             guard case .successful(let serverAddress) = server.startResult else {
                 XCTFail("failed to start server")
                 return
@@ -95,7 +95,7 @@ final class ProfileRecorderServerTests: XCTestCase {
                     body: ByteBuffer(string: "hi")
                 )
         })
-        try await server.withSamplingServer(logger: Logger(label: "")) { server in
+        try await server.withProfileRecordingServer(logger: Logger(label: "")) { server in
             guard case .successful(let serverAddress) = server.startResult else {
                 XCTFail("failed to start server")
                 return

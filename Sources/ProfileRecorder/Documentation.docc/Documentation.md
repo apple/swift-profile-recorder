@@ -16,7 +16,7 @@ ProfileRecorderSampler.sharedInstance.requestSamples(
 ```
 
 The example above creates 1000 samples with 10 ms between each sample. With this configuration, 
-the sampling server will capture samples over about 10 seconds.
+the profile recording server will capture samples over about 10 seconds.
 After that, you'll need to (on the machine you're running it) convert the samples into a regular format and symbolicate it.
 
 Optionally, you can have `llvm-symbolizer` symbolise your samples.

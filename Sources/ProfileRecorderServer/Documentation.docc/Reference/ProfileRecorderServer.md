@@ -15,36 +15,32 @@ First, add a dependency on ProfileRecorder:
     .product(name: "ProfileRecorderServer", package: "swipr"),
 ```
 
-Within your app, configure and run a sampling server, for example:
+Within your app, configure and run a profile recording server, for example:
 
 ```swift
 import ProfileRecorderServer
 
-do {
-    try await ProfileRecorderServer(
-        configuration: try await .parseFromEnvironment()
-    ).run(logger: logger)
-} catch {
-    logger.error("failed to start sampling server", metadata: ["error": "\(error)"])
-}
+await ProfileRecorderServer(
+    configuration: try await .parseFromEnvironment()
+).runIgnoringFailures(logger: logger)
 ```
 
-The `parseFromEnvironment()` function parses the `SWIPR_SAMPLING_SERVER_URL` & `SWIPR_SAMPLING_SERVER_URL_PATTERN`
+The `parseFromEnvironment()` function parses the `PROFILE_RECORDER_SERVER_URL` & `PROFILE_RECORDER_SERVER_URL_PATTERN`
 environment variables to configure the service.
 If you prefer to statically configure it, use:
 
 ```swift
-var samplingServerConfig = ProfileRecorderServerConfiguration.default
-samplingServerConfig.bindTarget = try SocketAddress(ipAddress: "127.0.0.0", port: 7377)
-try await ProfileRecorderServer(configuration: samplingServerConfig).run(logger: logger)
+var profilingServerConfig = ProfileRecorderServerConfiguration.default
+profilingServerConfig.bindTarget = try SocketAddress(ipAddress: "127.0.0.0", port: 7377)
+try await ProfileRecorderServer(configuration: profilingServerConfig).run(logger: logger)
 ```
 
 ### Production Configuration
 
 In production, it might be useful to use a UNIX Domain Socket instead of an HTTP server.
-If you have access to the filesystem where your app runs, such as a shell in a virtual machine or shell access to a restricted Kubernetes or Docker contrainersrentes pod, use the environment variable `SWIPR_SAMPLING_SERVER_URL_PATTERN` to define a UNIX domain socket to provide the traces.
+If you have access to the filesystem where your app runs, such as a shell in a virtual machine or shell access to a restricted Kubernetes or Docker contrainersrentes pod, use the environment variable `PROFILE_RECORDER_SERVER_URL_PATTERN` to define a UNIX domain socket to provide the traces.
 
-For example, set `SWIPR_SAMPLING_SERVER_URL_PATTERN="unix:///var/run/swipr-pid-{PID}.sock"`, and Swift Profile Recorder replaces the `{PID}` with the process id from your running app.
+For example, set `PROFILE_RECORDER_SERVER_URL_PATTERN="unix:///var/run/swipr-pid-{PID}.sock"`, and Swift Profile Recorder replaces the `{PID}` with the process id from your running app.
 In containerised environments, you get files called `/var/run/swipr-pid-1.sock` from this pattern that you can sample using the following command:
 
 ```bash
@@ -56,18 +52,19 @@ Drag the resulting file into [Firefox Profiler](https://profiler.firefox.com), a
 
 ## Topics
 
-### Creating a sampling server
+### Creating a profile recording server
 
 - ``init(configuration:)``
 - ``ProfileRecorderServerConfiguration``
 
-### Inspecting the sampling server
+### Inspecting the profile recording server
 
 - ``configuration``
 
-### Running the sampling server
+### Running the profile recording server
 
 - ``run(logger:)``
-- ``withSamplingServer(logger:_:)``
+- ``runIgnoringFailures(logger:)``
+- ``withProfileRecordingServer(logger:_:)``
 - ``ServerInfo``
 

@@ -75,16 +75,16 @@ internal struct ServerRouteHandler: Sendable {
     var matchingRoutes: [[String]]
 }
 
-/// The configuration for the in-process sampling server.
+/// The configuration for the in-process profile recording server.
 public struct ProfileRecorderServerConfiguration: Sendable {
-    /// The event loop group for the sampling server.
+    /// The event loop group for the profile recording server.
     public var group: MultiThreadedEventLoopGroup
-    /// The IP address and port bound for the sampling server.
+    /// The IP address and port bound for the profile recording server.
     public var bindTarget: Optional<SocketAddress>
     internal var unixDomainSocketPath: Optional<String>
     internal let pprofRootSlug = ["debug"]
     
-    /// The default configuration for a sampling server.
+    /// The default configuration for a profile recording server.
     public static var `default`: Self {
         return ProfileRecorderServerConfiguration(
             group: .singletonMultiThreadedEventLoopGroup,
@@ -97,7 +97,7 @@ public struct ProfileRecorderServerConfiguration: Sendable {
     /// - Parameters:
     ///   - host: The IP address to bind for providing traces.
     ///   - port: The port to use for providing traces.
-    ///   - group: The event loop group to use for the sampling server.
+    ///   - group: The event loop group to use for the profile recording server.
     /// - Returns: <#description#>
     public static func makeTCPListener(
         host: String,
@@ -113,14 +113,14 @@ public struct ProfileRecorderServerConfiguration: Sendable {
 
     /// Returns the configuration parsed from environment variables.
     ///
-    /// Checks for the environment variables `SWIPR_SAMPLING_SERVER_URL` for a URL with a socket and port,
-    /// or `SWIPR_SAMPLING_SERVER_URL_PATTERN` to provide a UNIX domain socket over which to read the samples.
+    /// Checks for the environment variables `PROFILE_RECORDER_SERVER_URL` for a URL with a socket and port,
+    /// or `PROFILE_RECORDER_SERVER_URL_PATTERN` to provide a UNIX domain socket over which to read the samples.
     public static func parseFromEnvironment() async throws -> Self {
         let serverURLString: String
 
-        if let string = ProcessInfo.processInfo.environment["SWIPR_SAMPLING_SERVER_URL"], !string.isEmpty {
+        if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL"], !string.isEmpty {
             serverURLString = string
-        } else if let string = ProcessInfo.processInfo.environment["SWIPR_SAMPLING_SERVER_URL_PATTERN"], !string.isEmpty {
+        } else if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL_PATTERN"], !string.isEmpty {
             serverURLString = string
                 .replacingOccurrences(of: "{PID}", with: "\(getpid())")
                 .replacingOccurrences(of: "{UUID}", with: "\(UUID().uuidString)")
@@ -153,11 +153,11 @@ public struct ProfileRecorderServerConfiguration: Sendable {
     }
 }
 
-/// A sampling server that provides performance traces for your app.
+/// A profile recording server that provides performance traces for your app.
 public struct ProfileRecorderServer: Sendable {
     typealias Outbound = NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>
     
-    /// The configuration for the sampling server.
+    /// The configuration for the profile recording server.
     public let configuration: ProfileRecorderServerConfiguration
     private let state: NIOLockedValueBox<State> = NIOLockedValueBox(State())
 
@@ -170,22 +170,22 @@ public struct ProfileRecorderServer: Sendable {
         var message: String
     }
     
-    /// The state of the sampling server.
+    /// The state of the profile recording server.
     public struct ServerInfo: Sendable {
-        /// The result states from starting a sampling server.
+        /// The result states from starting a profile recording server.
         public enum ServerStartResult: Sendable {
-            /// The sampling server hasn't yet been started.
-            case notAttemptedToStartSamplingServer
+            /// The profile recording server hasn't yet been started.
+            case notAttemptedToStartProfileRecordingServer
             /// The service started.
             case successful(SocketAddress)
             /// The service didn't start.
             case couldNotStart(any Swift.Error)
         }
-        /// The result of starting the sampling server.
+        /// The result of starting the profile recording server.
         public var startResult: ServerStartResult
     }
     
-    /// Creates a sampling server with the configuration you provide.
+    /// Creates a profile recording server with the configuration you provide.
     /// - Parameter configuration: <#configuration description#>
     public init(configuration: ProfileRecorderServerConfiguration) {
         self.configuration = configuration
@@ -222,41 +222,59 @@ public struct ProfileRecorderServer: Sendable {
         return true
     }
     
-    /// Runs the sampling server.
+    /// Runs the profile recording server.
+    ///
+    /// - warning: Make sure it's only reachable to users that you want to be able to sample your program. NEVER make it available on the internet.
     /// - Parameter logger: The logger instance to use for log messages.
     public func run(logger: Logger) async throws {
-        try await self.withSamplingServer(logger: logger) { info in
+        try await self.withProfileRecordingServer(logger: logger) { info in
             switch info.startResult {
             case .couldNotStart(let error):
-                logger.warning("could not start Swift Profile Recorder sampling server", metadata: ["error": "\(error)"])
+                logger.warning("could not start Swift Profile Recorder profile recording server", metadata: ["error": "\(error)"])
                 throw error
-            case .notAttemptedToStartSamplingServer:
+            case .notAttemptedToStartProfileRecordingServer:
                 logger.debug(
-                    "ProfileRecorder sampling server start not requested via SWIPR_SAMPLING_SERVER_URL env var",
-                    metadata: ["example": "SWIPR_SAMPLING_SERVER_URL=http://127.0.0.1:12345"]
+                    "profile recorder server start not requested via PROFILE_RECORDER_SERVER_URL env var",
+                    metadata: ["example": "PROFILE_RECORDER_SERVER_URL=http://127.0.0.1:12345"]
                 )
                 return
             case .successful:
                 ()
             }
-            logger.info("ProfileRecorder sampling server running", metadata: ["info": "\(info)"])
+            logger.info("profile recorder server up and running", metadata: ["info": "\(info)"])
+
+            // Sleep until we're cancelled
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 100_000_000)
+                try? await Task.sleep(nanoseconds: 100_000_000_000)
             }
         }
     }
     
-    /// Starts the sampling server, providing a state of the server to the closure that you provide.
+    /// Runs the profile recording server and ignore any failures.
+    ///
+    /// For this use case, it's recommended to ignore failures because profile recording is usually not your program's core functionality.
+    ///
+    /// - warning: Make sure it's only reachable to users that you want to be able to sample your program. NEVER make it available on the internet.
+    /// - Parameter logger: The logger instance to use for log messages.
+    public func runIgnoringFailures(logger: Logger) async {
+        do {
+            try await self.run(logger: logger)
+        } catch {
+            logger.info("profile recorder hit an error, continuing regardless", metadata: ["error": "\(error)"])
+        }
+    }
+
+    /// Starts the profile recording server, providing a state of the server to the closure that you provide.
     /// - Parameters:
     ///   - logger: The logger instance to use for log messages.
-    ///   - body: A closure with access to the state of the sampling server.
+    ///   - body: A closure with access to the state of the profile recording server.
     /// - Returns: The result of the closure you provide.
-    public func withSamplingServer<R: Sendable>(
+    public func withProfileRecordingServer<R: Sendable>(
         logger: Logger,
         _ body: @Sendable @escaping (ServerInfo) async throws -> R
     ) async throws -> R {
         guard let bindTarget = self.configuration.bindTarget else {
-            return try await body(ServerInfo(startResult: .notAttemptedToStartSamplingServer))
+            return try await body(ServerInfo(startResult: .notAttemptedToStartProfileRecordingServer))
         }
         let serverChannel: NIOAsyncChannel<NIOAsyncChannel<NIOHTTPServerRequestFull, HTTPPart<HTTPResponseHead, ByteBuffer>>, Never>
         do {
@@ -281,7 +299,7 @@ public struct ProfileRecorderServer: Sendable {
                         }
                     })
         } catch {
-            logger.info("failed to bind Swift Profile Recorder sampling server", metadata: ["error": "\(error)"])
+            logger.info("failed to bind Swift Profile Recorder profile recording server", metadata: ["error": "\(error)"])
             return try await (body(ServerInfo(startResult: .couldNotStart(error))))
         }
 
@@ -309,13 +327,13 @@ public struct ProfileRecorderServer: Sendable {
                                         var logger = logger
                                         logger[metadataKey: "peer"] = "\(child.channel.remoteAddress!)"
                                         do {
-                                            logger.info("ProfileRecorder sampling server connection received")
+                                            logger.info("profile recorder server connection received")
                                             try await child.executeThenClose {
                                                 inbound,
                                                 outbound in
                                                 for try await request in inbound {
                                                     logger.info(
-                                                        "ProfileRecorder sampling server request",
+                                                        "profile recorder server request",
                                                         metadata: ["request": "\(request)"]
                                                     )
 
@@ -339,12 +357,12 @@ public struct ProfileRecorderServer: Sendable {
                                 await childGroup.waitForAll()
                             } catch {
                                 logger.debug(
-                                    "ProfileRecorder sampling server failure or cancellation",
+                                    "profile recorder server failure or cancellation",
                                     metadata: ["error": "\(error)"]
                                 )
                                 guard error is CancellationError else {
                                     logger.info(
-                                        "ProfileRecorder sampling server failure",
+                                        "profile recorder server failure",
                                         metadata: ["error": "\(error)"]
                                     )
                                     return
