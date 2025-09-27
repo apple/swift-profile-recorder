@@ -90,3 +90,87 @@ Below, some compatible visualisation tools:
 
 - pprof's [`/debug/pprof/profile` endpoint](https://pkg.go.dev/net/http/pprof)
 - Swift Profile Recorder's own `/sample` endpoint
+
+## Example profiles
+
+- Hummingbird's [hello example](https://github.com/hummingbird-project/hummingbird-examples/tree/main/hello) hammered by `wrk -T50s -c 20000 -t 200  http://127.0.0.1:8080` running on macOS
+
+  - Applied [a small diff](#swipr-diff-hummingbird-hello) to enable Swift Profile Recorder in Humminbird's hello example
+  - Server started with just one SwiftNIO thread for a cleaner profile: `NIO_SINGLETON_BLOCKING_POOL_THREAD_COUNT=1 NIO_SINGLETON_GROUP_LOOP_COUNT=1 PROFILE_RECORDER_SERVER_URL_PATTERN=unix:///tmp/swipr-{PID}.sock .build/release/App`
+  = Samples received using `curl -sd '{"numberOfSamples":1000,"timeInterval":"10ms"}' --unix-socket /tmp/swipr-SERVER_PID.sock http://unix | swift demangle --compact > /tmp/samples.perf`
+  - View [profile in Firefox Profiler](https://share.firefox.dev/4pJf8Sl)
+  - Screenshot from speedscope.app:
+    ![](Misc/Resources/20250927-macos-hummingbird-hello.png)
+- Hummingbird's [hello example](https://github.com/hummingbird-project/hummingbird-examples/tree/main/hello) hammered by `wrk -T50s -c 20000 -t 200  http://127.0.0.1:8080` running on Linux (Ubuntu 20.04, Swift 6.2, unprivileged container)
+  - Applied [a small diff](#swipr-diff-hummingbird-hello) to enable Swift Profile Recorder in Humminbird's hello example
+  - Server started with just one SwiftNIO thread for a cleaner profile: `NIO_SINGLETON_BLOCKING_POOL_THREAD_COUNT=1 NIO_SINGLETON_GROUP_LOOP_COUNT=1 PROFILE_RECORDER_SERVER_URL_PATTERN=unix:///tmp/swipr-{PID}.sock .build/release/App`
+  = Samples received using `curl -sd '{"numberOfSamples":1000,"timeInterval":"10ms"}' --unix-socket /tmp/swipr-SERVER_PID.sock http://unix | swift demangle --compact > /tmp/samples.perf`
+  - View [profile in Firefox Profiler](https://share.firefox.dev/42JY1Ge)
+  - Screenshot from speedscope.app:
+    ![](Misc/Resources/20250927-linux-hummingbird-hello.png)
+
+### Example diffs
+
+#### Add Swift Profile Recorder to hummingbird-examples/hello
+<div id="swipr-diff-hummingbird-hello"></div>
+
+
+<details>
+<summary>Expand here to see `git diff -U1` onto [commit `97a09f0664679f017616a82894848b267c5e7068`](https://github.com/hummingbird-project/hummingbird-examples/commit/97a09f0664679f017616a82894848b267c5e7068)</summary>
+
+```diff
+diff --git a/hello/Package.swift b/hello/Package.swift
+index ae0b6d2..33b24ed 100644
+--- a/hello/Package.swift
++++ b/hello/Package.swift
+@@ -11,2 +11,3 @@ let package = Package(
+         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.4.0"),
++        .package(url: "git@github.com:apple/swift-profile-recorder.git", branch: "main"),
+     ],
+@@ -18,2 +19,3 @@ let package = Package(
+                 .product(name: "Hummingbird", package: "hummingbird"),
++                .product(name: "ProfileRecorderServer", package: "swift-profile-recorder"),
+             ],
+diff --git a/hello/Sources/App/app.swift b/hello/Sources/App/app.swift
+index 13131d9..95b114a 100644
+--- a/hello/Sources/App/app.swift
++++ b/hello/Sources/App/app.swift
+@@ -1,2 +1,3 @@
+ import ArgumentParser
++import ProfileRecorderServer
+
+@@ -17,2 +18,5 @@ struct HummingbirdArguments: AsyncParsableCommand {
+         )
++        async let _ = ProfileRecorderServer(configuration: .parseFromEnvironment()).runIgnoringFailures(
++            logger: app.logger
++        )
+         try await app.runService()
+diff --git a/proxy-server/Package.swift b/proxy-server/Package.swift
+index f4cf65d..a75eee8 100644
+--- a/proxy-server/Package.swift
++++ b/proxy-server/Package.swift
+@@ -13,2 +13,3 @@ let package = Package(
+         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.6.0"),
++        .package(url: "git@github.com:apple/swift-profile-recorder.git", branch: "main"),
+     ],
+@@ -22,2 +23,3 @@ let package = Package(
+                 .product(name: "NIOExtras", package: "swift-nio-extras"),
++                .product(name: "ProfileRecorderServer", package: "swift-profile-recorder"),
+             ],
+diff --git a/proxy-server/Sources/App/app.swift b/proxy-server/Sources/App/app.swift
+index af7fcc0..b491db1 100644
+--- a/proxy-server/Sources/App/app.swift
++++ b/proxy-server/Sources/App/app.swift
+@@ -2,2 +2,3 @@ import ArgumentParser
+ import Hummingbird
++import ProfileRecorderServer
+
+@@ -19,2 +20,5 @@ struct HummingbirdArguments: AsyncParsableCommand, AppArguments {
+         let app = buildApplication(self)
++        async let _ = ProfileRecorderServer(configuration: .parseFromEnvironment()).runIgnoringFailures(
++            logger: app.logger
++        )
+         try await app.runService()
+```
+
+</summary>
