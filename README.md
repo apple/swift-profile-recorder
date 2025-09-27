@@ -39,19 +39,11 @@ import ProfileRecorderServer
 struct YourApp {
    func run() async throws {
        // Run `ProfileRecorderServer` in the background if enabled via environment variable. Ignore failures.
+       // It will be automatically cancelled if this function returns.
        //
        // Example:
-       //   SWIPR_SAMPLING_SERVER_URL_PATTERN='unix:///tmp/my-app-samples-{PID}.sock' ./my-app
-       async let _ = { [logger] in
-           do {
-               try await ProfileRecorderServer(configuration: .parseFromEnvironment()).run(logger: logger)
-           } catch {
-               logger.warning(
-                   "could not run profile recording server, continuing regardless",
-                   metadata: ["error": "\(error)"]
-               )
-           }
-       }()
+       //   PROFILE_RECORDER_SERVER_URL_PATTERN='unix:///tmp/my-app-samples-{PID}.sock' ./my-app
+       async let _ = ProfileRecorderServer(configuration: .parseFromEnvironment()).runIgnoringFailures(logger: logger)
 
        [... your regular main function ...]
     }
@@ -63,9 +55,9 @@ struct YourApp {
 Once you added the profile recorder server to your app, you can enable it using an environment variable (assuming you passed `configuration: .parseFromEnvironment()`):
 
 ```bash
-# Request the sampling server to listen on a UNIX Domain Socket at path `/tmp/my-app-samples-{PID}.sock`.
+# Request the profile recording server to listen on a UNIX Domain Socket at path `/tmp/my-app-samples-{PID}.sock`.
 # `{PID}` will automatically be replaced with your process's process ID.
-SWIPR_SAMPLING_SERVER_URL_PATTERN=unix:///tmp/my-app-samples-{PID}.sock .build/release/MyApp
+PROFILE_RECORDER_SERVER_URL_PATTERN=unix:///tmp/my-app-samples-{PID}.sock .build/release/MyApp
 ```
 
 After that, you're ready to request samples:
@@ -78,10 +70,23 @@ Now, a file called `/tmp/samples.perf` should have been created. This file is in
 
 #### Visualisation
 
-Whilst `.perf` files are plain text files, they most easily digested in a visual form such as FlameGraphs.
+Whilst `.perf` files are plain text files, they are most easily digested in a visual form such as FlameGraphs.
 
-Here are some common, relatively easy-to-use visualisation tools:
+Below, some compatible visualisation tools:
 
 - [Speedscope](https://speedscope.app) ([speedscope.app](https://speedscope.app)), simply drag a `.perf` file (such as `/tmp/samples.perf` in the example above) onto the Speedscope website.
 - [Firefox Profiler](https://profiler.firefox.com) ([profiler.firefox.com](https://profiler.firefox.com)), simply drag a `.perf` file (such as `/tmp/samples.perf` in the example above) onto the Firefox Profiler website.
 - The original [FlameGraph](https://github.com/brendangregg/Flamegraph) tooling. Try for example `./stackcollapse-perf.pl < /tmp/samples.perf | swift demangle --compact | ./flamegraph.pl > /tmp/samples.svg && open -a Safari /tmp/samples.svg`.
+
+## Compatibility
+
+### Formats
+
+- The Linux perf script format (`.perf`, like what `perf record && perf script` would emit)
+- The `pprof` format (`.pprof`, like what Golang's pprof emits)
+- The "collapsed" format (like what FlameGraph's `stackcollapse*` scripts emit)
+
+### Profile recording server URL endpoints
+
+- pprof's [`/debug/pprof/profile` endpoint](https://pkg.go.dev/net/http/pprof)
+- Swift Profile Recorder's own `/sample` endpoint

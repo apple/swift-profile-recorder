@@ -34,7 +34,7 @@ final class ProfileRecorderTests: XCTestCase {
     var logger: Logger! = nil
 
     func testBasicJustRequestOneSample() throws {
-        guard ProfileRecorderSampler._isSupportedPlatformForTesting else {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
 
@@ -46,7 +46,7 @@ final class ProfileRecorderTests: XCTestCase {
     }
 
     func testMultipleSamples() throws {
-        guard ProfileRecorderSampler._isSupportedPlatformForTesting else {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
 
@@ -58,7 +58,7 @@ final class ProfileRecorderTests: XCTestCase {
     }
 
     func testSamplingWithALargeNumberOfThreads() throws {
-        guard ProfileRecorderSampler._isSupportedPlatformForTesting else {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
 
@@ -76,7 +76,7 @@ final class ProfileRecorderTests: XCTestCase {
     }
 
     func testSamplingWhilstThreadsAreCreatedAndDying() throws {
-        guard ProfileRecorderSampler._isSupportedPlatformForTesting else {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
 
@@ -98,7 +98,7 @@ final class ProfileRecorderTests: XCTestCase {
     // Experiencing issues due to the lack of frame pointers
     // (https://github.com/swiftlang/swift-corelibs-libdispatch/issues/909)
     func testSymbolicatedSamplesWork() async throws {
-        guard ProfileRecorderSampler._isSupportedPlatformForTesting else {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
 
@@ -157,7 +157,7 @@ final class ProfileRecorderTests: XCTestCase {
     }
     
     func testSymbolsAreMangled() async throws {
-        guard ProfileRecorderSampler._isSupportedPlatformForTesting else {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
 

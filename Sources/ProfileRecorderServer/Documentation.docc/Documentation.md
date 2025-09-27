@@ -11,13 +11,13 @@ This enables you to capture profile traces in situations where you don't have ac
 You can pull it in as a fully self-contained Swift Package Manger dependency and then use it for your app.
 
 The easiest way to use Swift Profile Recorder in your application is to have it run the Swift Profile Recorder Server.
-With the sampling server running, retrieve symbolicated samples with a single `curl` (or any other HTTP client) command.
+With the profile recording server running, retrieve symbolicated samples with a single `curl` (or any other HTTP client) command.
 
 ### Quick Start
 
 Once you have bootstraped the Swift Profile Recorder Server in your application, request samples:
 
-1. Set the environment variable `SWIPR_SAMPLING_SERVER_URL=http://127.0.0.1:7377` and run your server
+1. Set the environment variable `PROFILE_RECORDER_SERVER_URL=http://127.0.0.1:7377` and run your server
 2. Request the samples using the host and port that you defined in the environment variable:
 
 ```bash
@@ -25,7 +25,7 @@ curl -sd '{"numberOfSamples":100,"timeInterval":"10 ms"}' http://localhost:7377 
     swift demangle --simplified > /tmp/samples.perf
 ```
 
-The sampling server can also provide access to traces over a UNIX domain socket. For more information, see <doc:ProfileRecorderServer/ProfileRecorderServer>.
+The profile recording server can also provide access to traces over a UNIX domain socket. For more information, see <doc:ProfileRecorderServer/ProfileRecorderServer>.
 
 ## Topics
 

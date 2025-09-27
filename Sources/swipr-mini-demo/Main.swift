@@ -30,8 +30,8 @@ struct ProfileRecorderMiniDemo: ParsableCommand & Sendable {
     @Flag(inversion: .prefixedNo, help: "Should we burn do a bunch of Array.appends?")
     var arrayAppends: Bool = false
 
-    @Flag(inversion: .prefixedNo, help: "Start sampling server?")
-    var samplingServer: Bool = false
+    @Flag(inversion: .prefixedNo, help: "Start profile recording server?")
+    var profilingServer: Bool = false
 
     @Option(help: "How many samples?")
     var sampleCount: Int = 100
@@ -50,20 +50,20 @@ struct ProfileRecorderMiniDemo: ParsableCommand & Sendable {
 
     func run() throws {
         let logger = Logger(label: "swipr-mini-demo")
-        var samplingServerTask: Task<Void, any Error>? = nil
-        if self.samplingServer {
-            samplingServerTask = Task {
+        var profilingServerTask: Task<Void, any Error>? = nil
+        if self.profilingServer {
+            profilingServerTask = Task {
                 do {
                     try await ProfileRecorderServer(
                         configuration: try await .parseFromEnvironment()
                     ).run(logger: logger)
                 } catch {
-                    logger.error("failed to start sampling server", metadata: ["error": "\(error)"])
+                    logger.error("failed to start profile recording server", metadata: ["error": "\(error)"])
                 }
             }
         }
         defer {
-            samplingServerTask?.cancel()
+            profilingServerTask?.cancel()
         }
         ProfileRecorderSampler.sharedInstance.requestSamples(
             outputFilePath: self.output,
