@@ -1,30 +1,30 @@
 # Swift Profile Recorder, an in-process sampling profiler
 
-Want to profile your software in restricted Kubernetes or Docker contrainers or other environments where you don't get `CAP_SYS_PTRACE`? Look no further.
+Want to profile your software in restricted Kubernetes or Docker containers or other environments where you don't have `CAP_SYS_PTRACE`? Look no further.
 
 ## What is this?
 
 This is a sampling profiler (like `sample` on macOS) with the special twist that it runs _inside_ the process that gets sampled. This means that it doesn't need `CAP_SYS_PTRACE` or any other privileges to work.
 
-You can pull it in as a fully self-contained Swift Package Manger dependency and then use it for your app.
+You can pull it in as a fully self-contained Swift Package Manager dependency and then use it in your app.
 
-Swift Profile Recorder is an on- and off-CPU profiler which means that it records waiting threads (e.g. sleeps, locks, blocking system calls) as well as running (i.e. computing) threads.
+Swift Profile Recorder is an on- and off-CPU profiler, which means that it records waiting threads (e.g., sleeps, locks, blocking system calls) as well as running (i.e., computing) threads.
 
 ### Supported OSes
 
 At the moment, it only supports Linux and macOS.
-It could also support operating systems but it's not implemented at this point in time.
+It could also support other operating systems, but that's not implemented at this point in time.
 
 ## How can I use it?
 
 ### Via Swift Profile Recorder Server
 
-The easiest way to use Swift Profile Recorder in your application is to make it run the Swift Profile Recorder Server.
+The easiest way to use Swift Profile Recorder in your application is to run the Swift Profile Recorder Server.
 This allows you to retrieve symbolicated samples with a single `curl` (or any other HTTP client) command.
 
 #### Using the Sampling Server
 
-##### One off setup to get your application ready for sampling
+##### One-off setup to get your application ready for sampling
 
 - Add a `swift-profile-recorder` dependency: `.package(url: "https://github.com/apple/swift-profile-recorder.git", .upToNextMinor(from: "0.3.0"))`
 - Make your main `executableTarget` depend on `ProfileRecorderServer`: `.product(name: "ProfileRecorderServer", package: "swift-profile-recorder"),`
@@ -93,20 +93,20 @@ Below, some compatible visualisation tools:
 
 ## Example profiles
 
-- Hummingbird's [hello example](https://github.com/hummingbird-project/hummingbird-examples/tree/main/hello) hammered by `wrk -T50s -c 20000 -t 200  http://127.0.0.1:8080` running on macOS
+- Hummingbird's [hello example](https://github.com/hummingbird-project/hummingbird-examples/tree/main/hello) load-tested by `wrk -T50s -c 20000 -t 200  http://127.0.0.1:8080` running on macOS
 
   - Applied [a small diff](#swipr-diff-hummingbird-hello) to enable Swift Profile Recorder in Humminbird's hello example
   - Server started with just one SwiftNIO thread for a cleaner profile: `NIO_SINGLETON_BLOCKING_POOL_THREAD_COUNT=1 NIO_SINGLETON_GROUP_LOOP_COUNT=1 PROFILE_RECORDER_SERVER_URL_PATTERN=unix:///tmp/swipr-{PID}.sock .build/release/App`
   = Samples received using `curl -sd '{"numberOfSamples":1000,"timeInterval":"10ms"}' --unix-socket /tmp/swipr-SERVER_PID.sock http://unix | swift demangle --compact > /tmp/samples.perf`
   - View [profile in Firefox Profiler](https://share.firefox.dev/4pJf8Sl)
-  - Screenshot from speedscope.app:
+  - Screenshot of speedscope.app:
     ![](Misc/Resources/20250927-macos-hummingbird-hello.png)
-- Hummingbird's [hello example](https://github.com/hummingbird-project/hummingbird-examples/tree/main/hello) hammered by `wrk -T50s -c 20000 -t 200  http://127.0.0.1:8080` running on Linux (Ubuntu 20.04, Swift 6.2, unprivileged container)
+- Hummingbird's [hello example](https://github.com/hummingbird-project/hummingbird-examples/tree/main/hello) load-tested by `wrk -T50s -c 20000 -t 200  http://127.0.0.1:8080` running on Linux (Ubuntu 20.04, Swift 6.2, unprivileged container)
   - Applied [a small diff](#swipr-diff-hummingbird-hello) to enable Swift Profile Recorder in Humminbird's hello example
   - Server started with just one SwiftNIO thread for a cleaner profile: `NIO_SINGLETON_BLOCKING_POOL_THREAD_COUNT=1 NIO_SINGLETON_GROUP_LOOP_COUNT=1 PROFILE_RECORDER_SERVER_URL_PATTERN=unix:///tmp/swipr-{PID}.sock .build/release/App`
   = Samples received using `curl -sd '{"numberOfSamples":1000,"timeInterval":"10ms"}' --unix-socket /tmp/swipr-SERVER_PID.sock http://unix | swift demangle --compact > /tmp/samples.perf`
   - View [profile in Firefox Profiler](https://share.firefox.dev/42JY1Ge)
-  - Screenshot from speedscope.app:
+  - Screenshot of speedscope.app:
     ![](Misc/Resources/20250927-linux-hummingbird-hello.png)
 
 ### Example diffs
