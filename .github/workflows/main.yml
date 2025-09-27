@@ -9,7 +9,7 @@ on:
 jobs:
   unit-tests:
     name: Unit tests
-    uses: apple/swift-nio/.github/workflows/unit_tests.yml@main
+    uses: ./.github/workflows/unit_tests_with_pre_build.yml
     with:
       linux_5_10_arguments_override: "--explicit-target-dependency-import-check error"
       linux_6_0_arguments_override: "--explicit-target-dependency-import-check error"
@@ -20,11 +20,11 @@ jobs:
 
   cxx-interop:
     name: Cxx interop
-    uses: apple/swift-nio/.github/workflows/cxx_interop.yml@main
+    uses: ./.github/workflows/cxx_interop_with_pre_build.yml
 
   static-sdk:
     name: Static SDK
-    uses: apple/swift-nio/.github/workflows/static_sdk.yml@main
+    uses: ./.github/workflows/static_sdk_with_pre_build.yml
 
   macos-tests:
     name: macOS tests
@@ -35,4 +35,4 @@ jobs:
 
   release-builds:
     name: Release builds
-    uses: apple/swift-nio/.github/workflows/release_builds.yml@main
+    uses: ./.github/workflows/release_builds_with_pre_build.yml
