@@ -104,6 +104,10 @@ public enum ProfileRecorderSystemInformation {
         return "arm64"
 #elseif arch(arm64e)
         return "arm64e"
+#elseif arch(arm64_32)
+        return "arm64_32"
+#elseif arch(arm)
+        return "arm"
 #else
 #warning("unknown architecture")
         return "unknown"

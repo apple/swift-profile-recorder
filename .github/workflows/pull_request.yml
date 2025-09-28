@@ -50,7 +50,8 @@ jobs:
     uses: apple/swift-nio/.github/workflows/macos_tests.yml@main
     with:
       runner_pool: general
-      build_scheme: swift-profile-recorder
+      build_scheme: swift-profile-recorder-Package
+      env_vars: "{\"PROTOBUF_NO_PROTOC\": \"true\"}"
 
   release-builds:
     name: Release builds

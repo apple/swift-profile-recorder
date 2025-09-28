@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if canImport(Darwin)
+#if os(iOS) || os(macOS) || os(tvOS) || os(watchOS)
 import Darwin
 import Logging
 import NIOConcurrencyHelpers
@@ -101,7 +101,7 @@ public final class CoreSymbolicationSymboliser: Symbolizer & Sendable {
             allFrames: [SymbolisedStackFrame.SingleFrame(
                 address: fileVirtualAddressIP,
                 functionName: name,
-                functionOffset: expectedIP,
+                functionOffset: UInt(expectedIP),
                 library: nil,
                 vmap: library,
                 file: nil,

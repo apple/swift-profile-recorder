@@ -303,11 +303,7 @@ public struct ProfileRecorderServer: Sendable {
             return try await (body(ServerInfo(startResult: .couldNotStart(error))))
         }
 
-        #if canImport(Darwin)
-        let symbolizer = CoreSymbolicationSymboliser()
-        #else
-        let symbolizer = NativeELFSymboliser()
-        #endif
+        let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
         try symbolizer.start()
         defer {
             try! symbolizer.shutdown()

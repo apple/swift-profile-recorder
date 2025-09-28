@@ -21,6 +21,7 @@ import NIO
 import Logging
 import ProfileRecorderSampleConversion
 import ProfileRecorderHelpers
+import ProfileRecorder
 
 @main
 struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
@@ -87,11 +88,7 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
         let symboliser: any Symbolizer
         switch (self.useNativeSymbolizer, self.useFakeSymbolizer) {
         case (true, false):
-            #if os(macOS)
-            symboliser = CoreSymbolicationSymboliser()
-            #else
-            symboliser = NativeELFSymboliser()
-            #endif
+            symboliser = ProfileRecorderSampler._makeDefaultSymbolizer()
         case (false, false):
             symboliser = LLVMSymboliser(
                 config: llvmSymbolizerConfig,

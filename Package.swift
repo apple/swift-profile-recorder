@@ -53,6 +53,7 @@ let package = Package(
                 "CProfileRecorderSwiftELF",
                 "ProfileRecorderSampleConversion",
                 "ProfileRecorderHelpers",
+                "ProfileRecorder",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Logging", package: "swift-log"),
             ]),
