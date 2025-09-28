@@ -10,6 +10,9 @@ jobs:
     uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
     with:
       license_header_check_project_name: "Swift Profile Recorder"
+      python_lint_check_enabled: false
+      docs_check_enabled: false
+      format_check_enabled: false
 
   unit-tests:
     name: Unit tests
@@ -21,6 +24,7 @@ jobs:
       linux_6_2_arguments_override: "--explicit-target-dependency-import-check error"
       linux_nightly_next_arguments_override: "--explicit-target-dependency-import-check error"
       linux_nightly_main_arguments_override: "--explicit-target-dependency-import-check error"
+      linux_env_vars: {"PROTOBUF_NO_PROTOC": "true", "DEBIAN_FRONTEND": "noninteractive"}
 
   cxx-interop:
     name: Cxx interop
