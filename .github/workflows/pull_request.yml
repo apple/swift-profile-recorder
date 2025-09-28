@@ -23,10 +23,10 @@ jobs:
       linux_exclude_swift_versions: "[{\"swift_version\": \"5.9\"}]]"
       linux_os_versions: "[\"noble\", \"jammy\"]"
       linux_env_vars: |
-        why_PROTOBUF_NO_PROTOC="we do not need protoc and macOS builders do not have network."
+        why_PROTOBUF_NO_PROTOC='we do not need protoc and macOS builders do not have network.'
         PROTOBUF_NO_PROTOC=true
         DEBIAN_FRONTEND=noninteractive
-        why_LD_LIBRARY_PATH="old Ubuntus need this to enable frame pointers, all fine from 24.04"
+        why_LD_LIBRARY_PATH='old Ubuntus need this to enable frame pointers, all fine from 24.04'
         LD_LIBRARY_PATH=/lib/libc6-prof/x86_64-linux-gnu:/lib/libc6-prof/aarch64-linux-gnu
       macos_env_vars: |
         why_PROTOBUF_NO_PROTOC="we do not need protoc and macOS builders do not have network."
