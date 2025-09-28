@@ -94,17 +94,27 @@ extension ProfileRecorderSampler {
         }
     }
 
+    public static func _makeDefaultSymbolizer() -> some Symbolizer {
+        #if canImport(Darwin)
+        #if os(iOS) || os(macOS) || os(tvOS) || os(watchOS)
+        let symbolizer = CoreSymbolicationSymboliser()
+        #else
+        #warning("unsupported Darwin platform, falling back to dummy symbolizer")
+        let symbolizer = _ProfileRecorderFakeSymbolizer()
+        #endif
+        #else
+        let symbolizer = NativeELFSymboliser()
+        #endif
+        return symbolizer
+    }
+
     public func withSymbolizedSamplesInPerfScriptFormat<R: Sendable>(
         sampleCount: Int,
         timeBetweenSamples: TimeAmount,
         logger: Logger,
         _ body: (String) async throws -> R
     ) async throws -> R {
-        #if os(Linux)
-        let symbolizer = NativeELFSymboliser()
-        #elseif os(macOS)
-        let symbolizer = CoreSymbolicationSymboliser()
-        #endif
+        let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
         try symbolizer.start()
         defer {
             try! symbolizer.shutdown()

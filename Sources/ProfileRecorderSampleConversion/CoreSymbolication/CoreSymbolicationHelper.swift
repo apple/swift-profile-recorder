@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if os(iOS) || os(macOS) || os(tvOS) || os(watchOS) || os(visionOS)
+#if os(iOS) || os(macOS) || os(tvOS) || os(watchOS)
 import Darwin
 import Foundation
 import CProfileRecorderDarwin
