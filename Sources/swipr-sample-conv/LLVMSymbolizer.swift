@@ -98,27 +98,29 @@ internal final class LLVMSymboliser: Symbolizer & Sendable {
         }
 
         process.executableURL = URL(fileURLWithPath: symboliserPath)
-        process.arguments = [
-            "--print-address",
-            "--demangle",
-            "--inlining=true",
-            "--functions=linkage",
-            "--basenames",
-        ] + (self.config.viaJSON ? ["--output-style=JSON"] : [])
+        process.arguments =
+            [
+                "--print-address",
+                "--demangle",
+                "--inlining=true",
+                "--functions=linkage",
+                "--basenames",
+            ] + (self.config.viaJSON ? ["--output-style=JSON"] : [])
         try process.run()
 
         let channel: Channel = try NIOPipeBootstrap(group: self.group)
-            .channelInitializer { [
-                logger = self.logger,
-                viaJSON = self.config.viaJSON
-            ] channel in
+            .channelInitializer {
+                [
+                    logger = self.logger,
+                    viaJSON = self.config.viaJSON
+                ] channel in
                 do {
                     try channel.pipeline.syncOperations.addHandlers([
                         ByteToMessageHandler(LineBasedFrameDecoder()),
                         viaJSON ? LLVMJSONOutputParserHandler() : LLVMOutputParserHandler(),
                         LLVMSymbolizerEncoderHandler(logger: logger),
                         LogErrorHandler(logger: logger),
-                        RequestResponseHandler<LLVMSymbolizerQuery, SymbolisedStackFrame>()
+                        RequestResponseHandler<LLVMSymbolizerQuery, SymbolisedStackFrame>(),
                     ])
                     return channel.eventLoop.makeSucceededVoidFuture()
                 } catch {
@@ -131,8 +133,10 @@ internal final class LLVMSymboliser: Symbolizer & Sendable {
             ).wait()
         var unstucker: RepeatedTask? = nil
         if self.config.unstuckerWorkaround {
-            unstucker = channel.eventLoop.scheduleRepeatedTask(initialDelay: .milliseconds(1000),
-                                                                    delay: .milliseconds(1000)) { _ in
+            unstucker = channel.eventLoop.scheduleRepeatedTask(
+                initialDelay: .milliseconds(1000),
+                delay: .milliseconds(1000)
+            ) { _ in
                 let p = channel.eventLoop.makePromise(of: SymbolisedStackFrame.self)
                 channel.writeAndFlush((StackFrame(instructionPointer: .max, stackPointer: 0), p)).cascadeFailure(to: p)
                 p.futureResult.whenSuccess { str in
@@ -202,12 +206,14 @@ internal final class LLVMSymboliser: Symbolizer & Sendable {
     }
 
     deinit {
-        assert(self.state.withLockedValue { state in
-            assert(state.channel == nil)
-            assert(state.process == nil)
-            assert(state.unstucker == nil)
-            return state.channel == nil && state.process == nil && state.unstucker == nil
-        })
+        assert(
+            self.state.withLockedValue { state in
+                assert(state.channel == nil)
+                assert(state.process == nil)
+                assert(state.unstucker == nil)
+                return state.channel == nil && state.process == nil && state.unstucker == nil
+            }
+        )
     }
 
     public var description: String {

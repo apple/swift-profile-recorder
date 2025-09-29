@@ -38,8 +38,8 @@ public struct SymbolisedStackFrame: Sendable & Hashable {
             functionOffset: UInt,
             library: String?,
             vmap: DynamicLibMapping?,
-            file: Optional<String> = nil,
-            line: Optional<Int> = nil
+            file: String? = nil,
+            line: Int? = nil
         ) {
             self.address = address
             self.functionName = functionName
@@ -63,7 +63,11 @@ public protocol Symbolizer: Sendable {
     func start() throws
 
     @available(*, noasync, message: "blocks the calling thread")
-    func symbolise(fileVirtualAddressIP: UInt, library: DynamicLibMapping, logger: Logger) throws -> SymbolisedStackFrame
+    func symbolise(
+        fileVirtualAddressIP: UInt,
+        library: DynamicLibMapping,
+        logger: Logger
+    ) throws -> SymbolisedStackFrame
 
     @available(*, noasync, message: "blocks the calling thread")
     func shutdown() throws
@@ -85,7 +89,7 @@ enum AnyElfImage {
                         "address": "0x\(String(address, radix: 16))",
                         "image": "\(image)",
                         "image-name": "\(image.imageName)",
-                        "inline-frames": "\(image.inlineCallSites(at: UInt32(truncatingIfNeeded: address)))"
+                        "inline-frames": "\(image.inlineCallSites(at: UInt32(truncatingIfNeeded: address)))",
                     ]
                 )
                 return nil
@@ -109,7 +113,7 @@ enum AnyElfImage {
                         "address": "0x\(String(address, radix: 16))",
                         "image": "\(image)",
                         "image-name": "\(image.imageName)",
-                        "inline-frames": "\(image.inlineCallSites(at: address))"
+                        "inline-frames": "\(image.inlineCallSites(at: address))",
                     ]
                 )
                 return nil
@@ -152,7 +156,8 @@ internal struct LockedELFSourceCacheReference: @unchecked /* the ElfImage types 
     }
 
     @available(*, noasync, message: "blocks the calling thread")
-    func lookup(library: DynamicLibMapping, fileVirtualAddressIP: UInt, logger: Logger) -> Result<[ImageSymbol], Error> {
+    func lookup(library: DynamicLibMapping, fileVirtualAddressIP: UInt, logger: Logger) -> Result<[ImageSymbol], Error>
+    {
         return self.value.withLockedValue { elfSourceCache in
             var elfImage: AnyElfImage? = elfSourceCache[library.path]
             if elfImage == nil {
@@ -171,10 +176,12 @@ internal struct LockedELFSourceCacheReference: @unchecked /* the ElfImage types 
                 return .failure(.loadFailed)
             }
 
-            guard let results = elfImage.lookupRealAndInlinedFrames(
-                address: UInt64(fileVirtualAddressIP),
-                logger: logger
-            ) else {
+            guard
+                let results = elfImage.lookupRealAndInlinedFrames(
+                    address: UInt64(fileVirtualAddressIP),
+                    logger: logger
+                )
+            else {
                 return .failure(.lookupFailed)
             }
             return .success(results)
@@ -196,20 +203,23 @@ public final class NativeELFSymboliser: Symbolizer & Sendable {
     ) throws -> SymbolisedStackFrame {
         func makeFailed(_ why: String = "") -> SymbolisedStackFrame {
             return SymbolisedStackFrame(
-                allFrames: [SymbolisedStackFrame.SingleFrame(
-                    address: fileVirtualAddressIP,
-                    functionName: "unknown\(why) @ 0x\(String(fileVirtualAddressIP, radix: 16))",
-                    functionOffset: 0,
-                    library: nil,
-                    vmap: library,
-                    file: nil,
-                    line: nil
-                )]
+                allFrames: [
+                    SymbolisedStackFrame.SingleFrame(
+                        address: fileVirtualAddressIP,
+                        functionName: "unknown\(why) @ 0x\(String(fileVirtualAddressIP, radix: 16))",
+                        functionOffset: 0,
+                        library: nil,
+                        vmap: library,
+                        file: nil,
+                        line: nil
+                    )
+                ]
             )
         }
 
         let results: [ImageSymbol]
-        switch self.elfSourceCache.lookup(library: library, fileVirtualAddressIP: fileVirtualAddressIP, logger: logger) {
+        switch self.elfSourceCache.lookup(library: library, fileVirtualAddressIP: fileVirtualAddressIP, logger: logger)
+        {
         case .success(let success):
             results = success
         case .failure(let error):
@@ -272,7 +282,8 @@ public final class CachedSymbolizer: Sendable & CustomStringConvertible {
         logger: Logger
     ) {
         self.configuration = configuration
-        self.dynamicLibraryMappings = dynamicLibraryMappings
+        self.dynamicLibraryMappings =
+            dynamicLibraryMappings
             .compactMap { mapping in
                 guard mapping.segmentStartAddress <= mapping.segmentEndAddress else {
                     logger.error(
@@ -301,8 +312,8 @@ public final class CachedSymbolizer: Sendable & CustomStringConvertible {
                 return .candidateIsTooLow
             } else {
                 assert(
-                    stackFrame.instructionPointer >= candidate.segmentStartAddress &&
-                    stackFrame.instructionPointer <= candidate.segmentEndAddress
+                    stackFrame.instructionPointer >= candidate.segmentStartAddress
+                        && stackFrame.instructionPointer <= candidate.segmentEndAddress
                 )
                 return .found
             }
@@ -311,15 +322,15 @@ public final class CachedSymbolizer: Sendable & CustomStringConvertible {
 
         if _isDebugAssertConfiguration() {
             let allMatched = self.dynamicLibraryMappings.filter { mapping in
-                stackFrame.instructionPointer >= mapping.segmentStartAddress &&
-                stackFrame.instructionPointer < mapping.segmentEndAddress
+                stackFrame.instructionPointer >= mapping.segmentStartAddress
+                    && stackFrame.instructionPointer < mapping.segmentEndAddress
             }
             if allMatched.count > 1 {
                 self.logger.error(
                     "found multiple matches for instruction pointer",
                     metadata: [
                         "ip": "0x\(String(stackFrame.instructionPointer, radix: 16))",
-                        "mappings": "\(allMatched)"
+                        "mappings": "\(allMatched)",
                     ]
                 )
             } else {
@@ -335,50 +346,58 @@ public final class CachedSymbolizer: Sendable & CustomStringConvertible {
                 ]
             )
             return SymbolisedStackFrame(
-                allFrames: [SymbolisedStackFrame.SingleFrame(
-                    address: stackFrame.instructionPointer,
-                    functionName: "unknown @ 0x\(String(stackFrame.instructionPointer, radix: 16))",
-                    functionOffset: 0,
-                    library: nil,
-                    vmap: nil,
-                    file: nil,
-                    line: nil
-                )]
+                allFrames: [
+                    SymbolisedStackFrame.SingleFrame(
+                        address: stackFrame.instructionPointer,
+                        functionName: "unknown @ 0x\(String(stackFrame.instructionPointer, radix: 16))",
+                        functionOffset: 0,
+                        library: nil,
+                        vmap: nil,
+                        file: nil,
+                        line: nil
+                    )
+                ]
             )
         }
 
-        if (stackFrame.instructionPointer < matched.segmentSlide) {
+        if stackFrame.instructionPointer < matched.segmentSlide {
             self.logger.debug(
                 "Malformed input: filedMappedAddress greater than ip",
                 metadata: [
                     "ip": "0x\(String(stackFrame.instructionPointer, radix: 16))",
-                    "segmentSlide": "0x\(String(matched.segmentSlide, radix: 16))"
+                    "segmentSlide": "0x\(String(matched.segmentSlide, radix: 16))",
                 ]
             )
             return SymbolisedStackFrame(
-                allFrames: [SymbolisedStackFrame.SingleFrame(
-                    address: stackFrame.instructionPointer,
-                    functionName: "malformed-input @ 0x\(String(stackFrame.instructionPointer, radix: 16))",
-                    functionOffset: 0,
-                    library: nil,
-                    vmap: nil,
-                    file: nil,
-                    line: nil
-                )]
+                allFrames: [
+                    SymbolisedStackFrame.SingleFrame(
+                        address: stackFrame.instructionPointer,
+                        functionName: "malformed-input @ 0x\(String(stackFrame.instructionPointer, radix: 16))",
+                        functionOffset: 0,
+                        library: nil,
+                        vmap: nil,
+                        file: nil,
+                        line: nil
+                    )
+                ]
             )
         }
-        
+
         let fileVirtualAddressIP = stackFrame.instructionPointer - matched.segmentSlide
         self.logger.debug(
             "matched stackframe",
             metadata: [
                 "matched": "\(matched)",
                 "stack-frame": "\(stackFrame)",
-                "file-va-ip": "0x\(String(fileVirtualAddressIP, radix: 16))"
+                "file-va-ip": "0x\(String(fileVirtualAddressIP, radix: 16))",
             ]
         )
 
-        return try self.symbolizer.symbolise(fileVirtualAddressIP: fileVirtualAddressIP, library: matched, logger: self.logger)
+        return try self.symbolizer.symbolise(
+            fileVirtualAddressIP: fileVirtualAddressIP,
+            library: matched,
+            logger: self.logger
+        )
     }
 
     public func symbolise(_ stackFrame: StackFrame) throws -> SymbolisedStackFrame {
@@ -400,12 +419,12 @@ public final class CachedSymbolizer: Sendable & CustomStringConvertible {
 
     public var description: String {
         return """
-               CachedSymbolizer(\
-               cache: \(self.cacheCount), \
-               vmaps: \(self.dynamicLibraryMappings.count), \
-               sym: \(self.symbolizer.description)\
-               )
-               """
+            CachedSymbolizer(\
+            cache: \(self.cacheCount), \
+            vmaps: \(self.dynamicLibraryMappings.count), \
+            sym: \(self.symbolizer.description)\
+            )
+            """
     }
 }
 

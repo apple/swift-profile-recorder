@@ -19,7 +19,7 @@ import NIO
 @testable import ProfileRecorderSampleConversion
 
 final class FlamegraphCollapsedScriptTests: XCTestCase {
-        private var symbolizer: CachedSymbolizer! = nil
+    private var symbolizer: CachedSymbolizer! = nil
     private var underlyingSymbolizer: (any Symbolizer)! = nil
     private var logger: Logger! = nil
 
@@ -57,9 +57,9 @@ final class FlamegraphCollapsedScriptTests: XCTestCase {
         )
 
         let expected = """
-                       fake<1999>;fake<1345> 4000000005
+            fake<1999>;fake<1345> 4000000005
 
-                       """
+            """
         XCTAssertEqual(expected, String(buffer: actual))
     }
 
@@ -97,9 +97,9 @@ final class FlamegraphCollapsedScriptTests: XCTestCase {
         )
 
         let expected = """
-                       fake<1999>;fake<1345> 5
+            fake<1999>;fake<1345> 5
 
-                       """
+            """
         XCTAssertEqual(expected, String(buffer: actual))
     }
 
@@ -137,9 +137,9 @@ final class FlamegraphCollapsedScriptTests: XCTestCase {
         )
 
         let expected = """
-                       fake<1999>;fake<1345> 4987654321
+            fake<1999>;fake<1345> 4987654321
 
-                       """
+            """
         XCTAssertEqual(expected, String(buffer: actual))
     }
 

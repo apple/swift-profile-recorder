@@ -6,7 +6,7 @@ import PackageDescription
 let package = Package(
     name: "swift-profile-recorder",
     platforms: [
-        .macOS(.v11), .iOS(.v14), .watchOS(.v7), .tvOS(.v14)
+        .macOS(.v11), .iOS(.v14), .watchOS(.v7), .tvOS(.v14),
     ],
     products: [
         .library(name: "ProfileRecorder", targets: ["ProfileRecorder"]),
@@ -33,7 +33,8 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
-            ]),
+            ]
+        ),
         .target(
             name: "ProfileRecorderSampleConversion",
             dependencies: [
@@ -46,7 +47,8 @@ let package = Package(
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOExtras", package: "swift-nio-extras"),
-            ]),
+            ]
+        ),
         .executableTarget(
             name: "swipr-sample-conv",
             dependencies: [
@@ -56,7 +58,8 @@ let package = Package(
                 "ProfileRecorder",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "Logging", package: "swift-log"),
-            ]),
+            ]
+        ),
 
         // MARK: - Library targets
         .target(
@@ -116,40 +119,44 @@ let package = Package(
         ),
 
         // MARK: - Tests
-        .testTarget(name: "ProfileRecorderTests",
-                    dependencies: [
-                        "ProfileRecorder",
-                        "ProfileRecorderSampleConversion",
-                        "ProfileRecorderHelpers",
-                        .product(name: "Atomics", package: "swift-atomics"),
-                        .product(name: "NIO", package: "swift-nio"),
-                        .product(name: "Logging", package: "swift-log"),
-                        .product(name: "_NIOFileSystem", package: "swift-nio"),
-                    ]),
-        .testTarget(name: "ProfileRecorderServerTests",
-                    dependencies: [
-                        "ProfileRecorder",
-                        "ProfileRecorderServer",
-                        "ProfileRecorderSampleConversion",
-                        "ProfileRecorderHelpers",
-                        .product(name: "Atomics", package: "swift-atomics"),
-                        .product(name: "NIO", package: "swift-nio"),
-                        .product(name: "Logging", package: "swift-log"),
-                        .product(name: "_NIOFileSystem", package: "swift-nio"),
-                        .product(name: "AsyncHTTPClient", package: "async-http-client"),
-                    ]
-            ),
-        .testTarget(name: "ProfileRecorderSampleConversionTests",
-                    dependencies: [
-                        "ProfileRecorder",
-                        "ProfileRecorderSampleConversion",
-                        "ProfileRecorderHelpers",
-                        .product(name: "Atomics", package: "swift-atomics"),
-                        .product(name: "NIO", package: "swift-nio"),
-                        .product(name: "Logging", package: "swift-log"),
-                        .product(name: "_NIOFileSystem", package: "swift-nio"),
-                    ]
-                   ),
+        .testTarget(
+            name: "ProfileRecorderTests",
+            dependencies: [
+                "ProfileRecorder",
+                "ProfileRecorderSampleConversion",
+                "ProfileRecorderHelpers",
+                .product(name: "Atomics", package: "swift-atomics"),
+                .product(name: "NIO", package: "swift-nio"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "_NIOFileSystem", package: "swift-nio"),
+            ]
+        ),
+        .testTarget(
+            name: "ProfileRecorderServerTests",
+            dependencies: [
+                "ProfileRecorder",
+                "ProfileRecorderServer",
+                "ProfileRecorderSampleConversion",
+                "ProfileRecorderHelpers",
+                .product(name: "Atomics", package: "swift-atomics"),
+                .product(name: "NIO", package: "swift-nio"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "_NIOFileSystem", package: "swift-nio"),
+                .product(name: "AsyncHTTPClient", package: "async-http-client"),
+            ]
+        ),
+        .testTarget(
+            name: "ProfileRecorderSampleConversionTests",
+            dependencies: [
+                "ProfileRecorder",
+                "ProfileRecorderSampleConversion",
+                "ProfileRecorderHelpers",
+                .product(name: "Atomics", package: "swift-atomics"),
+                .product(name: "NIO", package: "swift-nio"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "_NIOFileSystem", package: "swift-nio"),
+            ]
+        ),
     ],
     cxxLanguageStandard: .cxx14
 )

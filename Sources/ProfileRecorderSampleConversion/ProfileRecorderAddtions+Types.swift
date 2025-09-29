@@ -19,23 +19,23 @@
 /// the filesystem --- it might even hold a path that only works
 /// from an entirely different machine.
 public struct SourceLocation: CustomStringConvertible, Sendable, Hashable {
-  /// The path of the source file.
-  public var path: String
+    /// The path of the source file.
+    public var path: String
 
-  /// The line number.
-  public var line: Int
+    /// The line number.
+    public var line: Int
 
-  /// The column number.
-  public var column: Int
+    /// The column number.
+    public var column: Int
 
-  /// Provide a textual description.
-  public var description: String {
-    if column > 0 && line > 0 {
-      return "\(path):\(line):\(column)"
-    } else if line > 0 {
-      return "\(path):\(line)"
-    } else {
-      return path
+    /// Provide a textual description.
+    public var description: String {
+        if column > 0 && line > 0 {
+            return "\(path):\(line):\(column)"
+        } else if line > 0 {
+            return "\(path):\(line)"
+        } else {
+            return path
+        }
     }
-  }
 }

@@ -33,11 +33,11 @@ final internal class LLVMOutputParserHandler: ChannelInboundHandler {
 
             if self.accumulation.count < 3 {
                 fputs(
-                      """
-                      WARNING: unexpected llvm-symbolizer text output (expected 1 + 2*n lines), \
-                      ignoring all: \(self.accumulation)\n
-                      """,
-                      stderr
+                    """
+                    WARNING: unexpected llvm-symbolizer text output (expected 1 + 2*n lines), \
+                    ignoring all: \(self.accumulation)\n
+                    """,
+                    stderr
                 )
             } else {
                 var remaining = self.accumulation[...]
@@ -47,11 +47,11 @@ final internal class LLVMOutputParserHandler: ChannelInboundHandler {
                 while !remaining.isEmpty {
                     guard remaining.count >= 2 else {
                         fputs(
-                              """
-                              WARNING: unexpected llvm-symbolizer text output (expected 1 + 2*n lines), \
-                              ignoring last: \(self.accumulation)\n
-                              """,
-                              stderr
+                            """
+                            WARNING: unexpected llvm-symbolizer text output (expected 1 + 2*n lines), \
+                            ignoring last: \(self.accumulation)\n
+                            """,
+                            stderr
                         )
                         break
                     }

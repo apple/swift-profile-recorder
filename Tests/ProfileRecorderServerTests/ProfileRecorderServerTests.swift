@@ -70,7 +70,8 @@ final class ProfileRecorderServerTests: XCTestCase {
                     head: .init(version: request.head.version, status: .ok),
                     body: ByteBuffer(string: "world")
                 )
-        })
+            }
+        )
         server._registerExtraRouteHandler(
             verb: .POST,
             matchingSlugs: [["post"]],
@@ -79,13 +80,15 @@ final class ProfileRecorderServerTests: XCTestCase {
                     head: .init(version: request.head.version, status: .ok),
                     body: ByteBuffer(string: "post")
                 )
-        })
+            }
+        )
         server._registerExtraRouteHandler(
             verb: .GET,
             matchingSlugs: [["clash", "on", "this", "slug"]],
             .makeSimple { request, context in
                 return nil // can't be bothered
-        })
+            }
+        )
         server._registerExtraRouteHandler(
             verb: .GET,
             matchingSlugs: [["clash", "on", "this", "slug"], ["no", "clash"]],
@@ -94,7 +97,8 @@ final class ProfileRecorderServerTests: XCTestCase {
                     head: .init(version: request.head.version, status: .ok),
                     body: ByteBuffer(string: "hi")
                 )
-        })
+            }
+        )
         try await server.withProfileRecordingServer(logger: Logger(label: "")) { server in
             guard case .successful(let serverAddress) = server.startResult else {
                 XCTFail("failed to start server")

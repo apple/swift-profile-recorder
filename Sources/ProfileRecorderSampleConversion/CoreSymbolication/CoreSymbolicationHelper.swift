@@ -18,27 +18,24 @@ import Foundation
 import CProfileRecorderDarwin
 
 extension Sym {
-    static let CSArchitectureGetArchitectureForName:
-    @convention(c) (UnsafePointer<CChar>) -> CSArchitecture =
-    symbol(coreSymbolicationHandle, "CSArchitectureGetArchitectureForName")
-    
+    static let CSArchitectureGetArchitectureForName: @convention(c) (UnsafePointer<CChar>) -> CSArchitecture =
+        symbol(coreSymbolicationHandle, "CSArchitectureGetArchitectureForName")
+
     // CSSymbolicator
-    static let CSSymbolicatorGetSymbolOwner:
-    @convention(c) (CSSymbolicatorRef) -> CSSymbolOwnerRef =
-    symbol(coreSymbolicationHandle, "CSSymbolicatorGetSymbolOwner")
+    static let CSSymbolicatorGetSymbolOwner: @convention(c) (CSSymbolicatorRef) -> CSSymbolOwnerRef =
+        symbol(coreSymbolicationHandle, "CSSymbolicatorGetSymbolOwner")
     static let CSSymbolicatorGetSymbolWithAddressAtTime:
-    @convention(c) (CSSymbolicatorRef, vm_address_t, CSMachineTime) -> CSSymbolRef =
-    symbol(coreSymbolicationHandle, "CSSymbolicatorGetSymbolWithAddressAtTime")
+        @convention(c) (CSSymbolicatorRef, vm_address_t, CSMachineTime) -> CSSymbolRef =
+            symbol(coreSymbolicationHandle, "CSSymbolicatorGetSymbolWithAddressAtTime")
     static let CSSymbolicatorCreateWithPathAndArchitecture:
-    @convention(c) (UnsafePointer<CChar>, CSArchitecture) -> CSSymbolicatorRef =
-    symbol(coreSymbolicationHandle, "CSSymbolicatorCreateWithPathAndArchitecture")
+        @convention(c) (UnsafePointer<CChar>, CSArchitecture) -> CSSymbolicatorRef =
+            symbol(coreSymbolicationHandle, "CSSymbolicatorCreateWithPathAndArchitecture")
 }
 
 // .. CSSymbolicator ...........................................................
 func SymbolicatorCreateWithDynamicLibMapping(
     _ library: DynamicLibMapping
-) -> CSSymbolicatorRef
-{
+) -> CSSymbolicatorRef {
     return library.path.withCString { path in
         library.architecture.withCString { arch in
             let CSarch = Sym.CSArchitectureGetArchitectureForName(arch)
@@ -48,34 +45,36 @@ func SymbolicatorCreateWithDynamicLibMapping(
 }
 
 func CSSymbolicatorGetSymbolOwnerWithAddress(
-  _ symbolicator: CSSymbolicatorRef,
-  _ addr: vm_address_t
+    _ symbolicator: CSSymbolicatorRef,
+    _ addr: vm_address_t
 ) -> CSSymbolOwnerRef {
-  return Sym.CSSymbolicatorGetSymbolOwnerWithAddressAtTime(symbolicator,
-                                                           addr, kCSBeginningOfTime)
+    return Sym.CSSymbolicatorGetSymbolOwnerWithAddressAtTime(
+        symbolicator,
+        addr,
+        kCSBeginningOfTime
+    )
 }
 
 func CSSymbolicatorGetSymbolOwner(
     _ symbolicator: CSSymbolicatorRef
 ) -> CSSymbolOwnerRef {
     var owner: CSSymbolOwnerRef = kCSNull
-    
+
     let count = CSSymbolicatorForeachSymbolOwnerAtTime(symbolicator, kCSAllTimes) { symbolOwner in
         owner = symbolOwner
     }
-    
+
     if count == 1 {
         return owner
     }
-    
+
     return kCSNull
 }
 
 func CSSymbolicatorGetSymbolWithAddressAtTime(
-  _ symbolicator: CSSymbolicatorRef,
-  _ address: vm_address_t
-  ) ->  CSSymbolRef {
-      return Sym.CSSymbolicatorGetSymbolWithAddressAtTime(symbolicator, address, kCSBeginningOfTime)
+    _ symbolicator: CSSymbolicatorRef,
+    _ address: vm_address_t
+) -> CSSymbolRef {
+    return Sym.CSSymbolicatorGetSymbolWithAddressAtTime(symbolicator, address, kCSBeginningOfTime)
 }
 #endif
-

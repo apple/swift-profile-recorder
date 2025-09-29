@@ -83,7 +83,7 @@ public struct ProfileRecorderServerConfiguration: Sendable {
     public var bindTarget: Optional<SocketAddress>
     internal var unixDomainSocketPath: Optional<String>
     internal let pprofRootSlug = ["debug"]
-    
+
     /// The default configuration for a profile recording server.
     public static var `default`: Self {
         return ProfileRecorderServerConfiguration(
@@ -92,7 +92,7 @@ public struct ProfileRecorderServerConfiguration: Sendable {
             unixDomainSocketPath: nil
         )
     }
-    
+
     /// Creates a configuration
     /// - Parameters:
     ///   - host: The IP address to bind for providing traces.
@@ -120,8 +120,11 @@ public struct ProfileRecorderServerConfiguration: Sendable {
 
         if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL"], !string.isEmpty {
             serverURLString = string
-        } else if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL_PATTERN"], !string.isEmpty {
-            serverURLString = string
+        } else if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL_PATTERN"],
+            !string.isEmpty
+        {
+            serverURLString =
+                string
                 .replacingOccurrences(of: "{PID}", with: "\(getpid())")
                 .replacingOccurrences(of: "{UUID}", with: "\(UUID().uuidString)")
         } else {
@@ -137,12 +140,16 @@ public struct ProfileRecorderServerConfiguration: Sendable {
             )
         case "http+unix":
             guard let path = serverURL?.host?.removingPercentEncoding, path.count > 0 else {
-                throw ProfileRecorderServer.Error(message: "need UNIX Domain Socket path in host for \(serverURLString)")
+                throw ProfileRecorderServer.Error(
+                    message: "need UNIX Domain Socket path in host for \(serverURLString)"
+                )
             }
             bindTarget = try SocketAddress(unixDomainSocketPath: path)
         case "unix":
             guard let path = serverURL?.path.removingPercentEncoding, path.count > 0 else {
-                throw ProfileRecorderServer.Error(message: "need UNIX Domain Socket path in path for \(serverURLString)")
+                throw ProfileRecorderServer.Error(
+                    message: "need UNIX Domain Socket path in path for \(serverURLString)"
+                )
             }
             bindTarget = try SocketAddress(unixDomainSocketPath: path)
         default:
@@ -156,7 +163,7 @@ public struct ProfileRecorderServerConfiguration: Sendable {
 /// A profile recording server that provides performance traces for your app.
 public struct ProfileRecorderServer: Sendable {
     typealias Outbound = NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>
-    
+
     /// The configuration for the profile recording server.
     public let configuration: ProfileRecorderServerConfiguration
     private let state: NIOLockedValueBox<State> = NIOLockedValueBox(State())
@@ -169,7 +176,7 @@ public struct ProfileRecorderServer: Sendable {
     public struct Error: Swift.Error {
         var message: String
     }
-    
+
     /// The state of the profile recording server.
     public struct ServerInfo: Sendable {
         /// The result states from starting a profile recording server.
@@ -184,7 +191,7 @@ public struct ProfileRecorderServer: Sendable {
         /// The result of starting the profile recording server.
         public var startResult: ServerStartResult
     }
-    
+
     /// Creates a profile recording server with the configuration you provide.
     /// - Parameter configuration: <#configuration description#>
     public init(configuration: ProfileRecorderServerConfiguration) {
@@ -221,7 +228,7 @@ public struct ProfileRecorderServer: Sendable {
         }
         return true
     }
-    
+
     /// Runs the profile recording server.
     ///
     /// - warning: Make sure it's only reachable to users that you want to be able to sample your program. NEVER make it available on the internet.
@@ -230,7 +237,10 @@ public struct ProfileRecorderServer: Sendable {
         try await self.withProfileRecordingServer(logger: logger) { info in
             switch info.startResult {
             case .couldNotStart(let error):
-                logger.warning("could not start Swift Profile Recorder profile recording server", metadata: ["error": "\(error)"])
+                logger.warning(
+                    "could not start Swift Profile Recorder profile recording server",
+                    metadata: ["error": "\(error)"]
+                )
                 throw error
             case .notAttemptedToStartProfileRecordingServer:
                 logger.debug(
@@ -249,7 +259,7 @@ public struct ProfileRecorderServer: Sendable {
             }
         }
     }
-    
+
     /// Runs the profile recording server and ignore any failures.
     ///
     /// For this use case, it's recommended to ignore failures because profile recording is usually not your program's core functionality.
@@ -276,7 +286,8 @@ public struct ProfileRecorderServer: Sendable {
         guard let bindTarget = self.configuration.bindTarget else {
             return try await body(ServerInfo(startResult: .notAttemptedToStartProfileRecordingServer))
         }
-        let serverChannel: NIOAsyncChannel<NIOAsyncChannel<NIOHTTPServerRequestFull, HTTPPart<HTTPResponseHead, ByteBuffer>>, Never>
+        let serverChannel:
+            NIOAsyncChannel<NIOAsyncChannel<NIOHTTPServerRequestFull, HTTPPart<HTTPResponseHead, ByteBuffer>>, Never>
         do {
             serverChannel = try await ServerBootstrap(group: self.configuration.group)
                 .serverChannelOption(.socketOption(.so_reuseaddr), value: 1)
@@ -297,9 +308,13 @@ public struct ProfileRecorderServer: Sendable {
                         } catch {
                             return channel.eventLoop.makeFailedFuture(error)
                         }
-                    })
+                    }
+                )
         } catch {
-            logger.info("failed to bind Swift Profile Recorder profile recording server", metadata: ["error": "\(error)"])
+            logger.info(
+                "failed to bind Swift Profile Recorder profile recording server",
+                metadata: ["error": "\(error)"]
+            )
             return try await (body(ServerInfo(startResult: .couldNotStart(error))))
         }
 
@@ -412,17 +427,17 @@ public struct ProfileRecorderServer: Sendable {
         let exampleEncoded = String(decoding: try! JSONEncoder().encode(example), as: UTF8.self)
         let exampleURL: String
         var exampleCURLArgs: [String] = []
-        let bindTarget = self.configuration.bindTarget!  // will work, we received a request on it!
+        let bindTarget = self.configuration.bindTarget! // will work, we received a request on it!
         switch bindTarget {
         case .v4:
-            let ipAddress = bindTarget.ipAddress!  // IPv4 has IP addresses
+            let ipAddress = bindTarget.ipAddress! // IPv4 has IP addresses
             guard ipAddress != "0.0.0.0" else {
                 exampleURL = "http://127.0.0.1:\(bindTarget.port!)/sample"
                 break
             }
             exampleURL = "http://\(ipAddress):\(bindTarget.port!)/sample"
         case .v6:
-            let ipAddress = bindTarget.ipAddress!  // IPv6 has IP addresses
+            let ipAddress = bindTarget.ipAddress! // IPv6 has IP addresses
             guard ipAddress != "::" else {
                 exampleURL = "http://[::1]:\(bindTarget.port!)/sample"
                 break
@@ -437,63 +452,63 @@ public struct ProfileRecorderServer: Sendable {
         if exampleCURLArgs.isEmpty {
             exampleCURLArgs.append(contentsOf: [exampleURL])
         }
-        exampleCURLArgs.insert(contentsOf: ["-s", "-d", "'"+exampleEncoded+"'"], at: 0)
+        exampleCURLArgs.insert(contentsOf: ["-s", "-d", "'" + exampleEncoded + "'"], at: 0)
         try await self.respondWithFailure(
             string: """
-                    # Welcome to the Swift Profile Recorder Server!
+                # Welcome to the Swift Profile Recorder Server!
 
-                    To request samples, please send POST request to \(exampleURL)
+                To request samples, please send POST request to \(exampleURL)
 
-                    ## Details
+                ## Details
 
-                    URL: \(exampleURL)
-                    Is this a supported platform? \(ProfileRecorderSampler.isSupportedPlatform ? "yes" : "no")
+                URL: \(exampleURL)
+                Is this a supported platform? \(ProfileRecorderSampler.isSupportedPlatform ? "yes" : "no")
 
-                    ## Examples
+                ## Examples
 
-                    Example body: \(exampleEncoded)
+                Example body: \(exampleEncoded)
 
-                    If you're using curl, you could run
+                If you're using curl, you could run
 
-                    ```
-                    curl \(exampleCURLArgs.joined(separator: " ")) > /tmp/samples.perf
-                    ```
+                ```
+                curl \(exampleCURLArgs.joined(separator: " ")) > /tmp/samples.perf
+                ```
 
-                    To also immediately demangle the symbols, run
+                To also immediately demangle the symbols, run
 
-                    ```
-                    curl \(exampleCURLArgs.joined(separator: " ")) | swift demangle --simplified > /tmp/samples.perf
-                    ```
+                ```
+                curl \(exampleCURLArgs.joined(separator: " ")) | swift demangle --simplified > /tmp/samples.perf
+                ```
 
-                    Once you have `/tmp/samples.perf`, you can then visualise it.
+                Once you have `/tmp/samples.perf`, you can then visualise it.
 
 
-                    ## Visualisation
+                ## Visualisation
 
-                    ### FlameGraphs
+                ### FlameGraphs
 
-                    Repository: https://github.com/brendangregg/Flamegraph
+                Repository: https://github.com/brendangregg/Flamegraph
 
-                    ```
-                    FlameGraph/stackcollapse-perf.pl < /tmp/samples.perf | FlameGraph/flamegraph.pl > /tmp/samples.svg
-                    open /tmp/samples.svg
-                    ```
+                ```
+                FlameGraph/stackcollapse-perf.pl < /tmp/samples.perf | FlameGraph/flamegraph.pl > /tmp/samples.svg
+                open /tmp/samples.svg
+                ```
 
-                    ### Firefox Profiler (https://profiler.firefox.com):
+                ### Firefox Profiler (https://profiler.firefox.com):
 
-                    How to use it?
+                How to use it?
 
-                    1. Open https://profiler.firefox.com and drag /tmp/samples.svg onto it.
-                    2. Click "Show all tracks" in "tracks" menu on the top left
-                    3. Slightly further down, select the first thread (track), hold Shift and select the last thread.
-                    4. Open the "Flame Graph" tab
+                1. Open https://profiler.firefox.com and drag /tmp/samples.svg onto it.
+                2. Click "Show all tracks" in "tracks" menu on the top left
+                3. Slightly further down, select the first thread (track), hold Shift and select the last thread.
+                4. Open the "Flame Graph" tab
 
-                    ### Other options
+                ### Other options
 
-                    Check https://profilerpedia.markhansen.co.nz/formats/linux-perf-script/#converts-to-transitive for
-                    a list of visualisation options for the "Linux perf script" format that Swift Profile Recorder produces.
+                Check https://profilerpedia.markhansen.co.nz/formats/linux-perf-script/#converts-to-transitive for
+                a list of visualisation options for the "Linux perf script" format that Swift Profile Recorder produces.
 
-                    """,
+                """,
             code: .notFound,
             outbound
         )
@@ -509,7 +524,8 @@ public struct ProfileRecorderServer: Sendable {
             return nil
         }
         let components = url.path.split(separator: "/")
-        let kvPairs: [(String, String?)] = url.query?
+        let kvPairs: [(String, String?)] =
+            url.query?
             .split(separator: "&")
             .compactMap { (queryItem: Substring) -> (String, String?)? in
                 let kv = queryItem.split(separator: "=", maxSplits: 1)
@@ -535,15 +551,17 @@ public struct ProfileRecorderServer: Sendable {
         do {
             let sampleRequest: SampleRequest
             switch (request.head.method, self.decodeURI(request.head.uri)) {
-            case (.GET, .some(let decodedURI)) where decodedURI.components.matches(
+            case (.GET, .some(let decodedURI))
+            where decodedURI.components.matches(
                 prefix: self.configuration.pprofRootSlug,
                 oneOfPaths: [["pprof", "profile"], ["pprof", "symbolizer=fake", "profile"]]
             ) != nil:
                 let seconds = (Int(decodedURI.queryParams["seconds"].flatMap { $0 } ?? "not set") ?? 30)
                     .clamping(to: 0...1000) // 30 s seems to be Golang's default
-                let symbolizerKind = decodedURI.queryParams["symbolizer"].flatMap { kind in
-                    ProfileRecorderSymbolizerKind(rawValue: kind ?? "n/a")
-                } ?? (decodedURI.components.contains("symbolizer=fake") ? .fake : .native)
+                let symbolizerKind =
+                    decodedURI.queryParams["symbolizer"].flatMap { kind in
+                        ProfileRecorderSymbolizerKind(rawValue: kind ?? "n/a")
+                    } ?? (decodedURI.components.contains("symbolizer=fake") ? .fake : .native)
                 let sampleRate = 100.clamping(to: 0...1000) // 100 Hz, seems to be Golang's default
                 let numberOfSamples = seconds * sampleRate
                 let timeIntervalBetweenSamplesMS = (1000 / sampleRate).clamping(to: 1...100_000)
@@ -554,10 +572,12 @@ public struct ProfileRecorderServer: Sendable {
                     format: .pprofSymbolized,
                     symbolizer: symbolizerKind
                 )
-            case (.POST, .some(let decodedURI)) where decodedURI.components.isEmpty || decodedURI.components.matches(
-                prefix: [],
-                oneOfPaths: [["sample"], ["samples"]]
-            ) != nil:
+            case (.POST, .some(let decodedURI))
+            where decodedURI.components.isEmpty
+                || decodedURI.components.matches(
+                    prefix: [],
+                    oneOfPaths: [["sample"], ["samples"]]
+                ) != nil:
                 // Native Swift Profile Recorder Sampling server
                 sampleRequest = try JSONDecoder().decode(SampleRequest.self, from: request.body ?? ByteBuffer())
             case (let verb, .some(let decodedURI)):
@@ -661,18 +681,23 @@ struct SampleRequest: Sendable & Codable {
     }
 
     init(from decoder: any Decoder) throws {
-        let container: KeyedDecodingContainer<SampleRequest.CodingKeys> = try decoder.container(keyedBy: SampleRequest.CodingKeys.self)
-        
+        let container: KeyedDecodingContainer<SampleRequest.CodingKeys> = try decoder.container(
+            keyedBy: SampleRequest.CodingKeys.self
+        )
+
         self.numberOfSamples = try container.decode(Int.self, forKey: SampleRequest.CodingKeys.numberOfSamples)
         let timeIntervalString = try container.decode(String.self, forKey: SampleRequest.CodingKeys.timeInterval)
         self.timeInterval = try TimeAmount(timeIntervalString, defaultUnit: "ms")
         self.format = try container.decodeIfPresent(SampleFormat.self, forKey: .format) ?? .perfSymbolized
-        self.symbolizer = try container.decodeIfPresent(ProfileRecorderSymbolizerKind.self, forKey: .symbolizer) ?? .native
+        self.symbolizer =
+            try container.decodeIfPresent(ProfileRecorderSymbolizerKind.self, forKey: .symbolizer) ?? .native
     }
-    
+
     func encode(to encoder: any Encoder) throws {
-        var container: KeyedEncodingContainer<SampleRequest.CodingKeys> = encoder.container(keyedBy: SampleRequest.CodingKeys.self)
-        
+        var container: KeyedEncodingContainer<SampleRequest.CodingKeys> = encoder.container(
+            keyedBy: SampleRequest.CodingKeys.self
+        )
+
         try container.encode(self.numberOfSamples, forKey: SampleRequest.CodingKeys.numberOfSamples)
         try container.encode(self.timeInterval.prettyPrint, forKey: SampleRequest.CodingKeys.timeInterval)
         if self.format != .perfSymbolized {
@@ -704,7 +729,6 @@ final class HTTPByteBufferResponsePartHandler: ChannelOutboundHandler {
 struct TimeAmountConversionError: Error {
     var message: String
 }
-
 
 extension TimeAmount {
     init(_ userProvidedString: String, defaultUnit: String) throws {

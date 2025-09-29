@@ -45,27 +45,34 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
     @Option(help: "Should we attempt to print file:line information?")
     var enableFileLine: Bool = false
 
-    @Option(help: "Which output format", transform: { stringValue in
-        switch stringValue {
-        case "perf-script":
-            return .perfSymbolized
-        case "pprof":
-            return .pprofSymbolized
-        case "collapsed":
-            return .flamegraphCollapsedSymbolized
-        case "raw":
-            return .raw
-        default:
-            throw ValidationError("unknown format '\(stringValue)', try 'perf-script' or 'pprof'")
+    @Option(
+        help: "Which output format",
+        transform: { stringValue in
+            switch stringValue {
+            case "perf-script":
+                return .perfSymbolized
+            case "pprof":
+                return .pprofSymbolized
+            case "collapsed":
+                return .flamegraphCollapsedSymbolized
+            case "raw":
+                return .raw
+            default:
+                throw ValidationError("unknown format '\(stringValue)', try 'perf-script' or 'pprof'")
+            }
         }
-    })
+    )
     var format: ProfileRecorderOutputFormat = .perfSymbolized
 
-    @Option(help: "Log level to use", transform: { stringValue in
-        return try Logger.Level(rawValue: stringValue) ?? {
-            throw ValidationError("unknown log level \(stringValue)")
-        }()
-    })
+    @Option(
+        help: "Log level to use",
+        transform: { stringValue in
+            return try Logger.Level(rawValue: stringValue)
+                ?? {
+                    throw ValidationError("unknown log level \(stringValue)")
+                }()
+        }
+    )
     var logLevel: Logger.Level = .info
 
     @Option(name: [.customLong("debug-sym")], help: "Debugging, feed FILE:ADDRESS pairs into the symboliser")

@@ -38,11 +38,14 @@ final class ProfileRecorderTests: XCTestCase {
             return
         }
 
-        XCTAssertNoThrow(try
-                         ProfileRecorderSampler.sharedInstance.requestSamples(outputFilePath: "\(self.tempDirectory!)/samples.samples",
-                                                                    count: 1,
-                                                                    timeBetweenSamples: .nanoseconds(0),
-                                                                    eventLoop: self.group.next()).wait())
+        XCTAssertNoThrow(
+            try ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: "\(self.tempDirectory!)/samples.samples",
+                count: 1,
+                timeBetweenSamples: .nanoseconds(0),
+                eventLoop: self.group.next()
+            ).wait()
+        )
     }
 
     func testMultipleSamples() throws {
@@ -50,11 +53,14 @@ final class ProfileRecorderTests: XCTestCase {
             return
         }
 
-        XCTAssertNoThrow(try
-                         ProfileRecorderSampler.sharedInstance.requestSamples(outputFilePath: "\(self.tempDirectory!)/samples.samples",
-                                                                    count: 10,
-                                                                    timeBetweenSamples: .nanoseconds(0),
-                                                                    eventLoop: self.group.next()).wait())
+        XCTAssertNoThrow(
+            try ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: "\(self.tempDirectory!)/samples.samples",
+                count: 10,
+                timeBetweenSamples: .nanoseconds(0),
+                eventLoop: self.group.next()
+            ).wait()
+        )
     }
 
     func testSamplingWithALargeNumberOfThreads() throws {
@@ -68,11 +74,14 @@ final class ProfileRecorderTests: XCTestCase {
             XCTAssertNoThrow(try threads.syncShutdownGracefully())
         }
 
-        XCTAssertNoThrow(try
-                         ProfileRecorderSampler.sharedInstance.requestSamples(outputFilePath: "\(self.tempDirectory!)/samples.samples",
-                                                                    count: 100,
-                                                                    timeBetweenSamples: .nanoseconds(0),
-                                                                    eventLoop: self.group.next()).wait())
+        XCTAssertNoThrow(
+            try ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: "\(self.tempDirectory!)/samples.samples",
+                count: 100,
+                timeBetweenSamples: .nanoseconds(0),
+                eventLoop: self.group.next()
+            ).wait()
+        )
     }
 
     func testSamplingWhilstThreadsAreCreatedAndDying() throws {
@@ -80,10 +89,12 @@ final class ProfileRecorderTests: XCTestCase {
             return
         }
 
-        let samples = ProfileRecorderSampler.sharedInstance.requestSamples(outputFilePath: "\(self.tempDirectory!)/samples.samples",
-                                                                 count: 1000,
-                                                                 timeBetweenSamples: .microseconds(100),
-                                                                 eventLoop: self.group.next())
+        let samples = ProfileRecorderSampler.sharedInstance.requestSamples(
+            outputFilePath: "\(self.tempDirectory!)/samples.samples",
+            count: 1000,
+            timeBetweenSamples: .microseconds(100),
+            eventLoop: self.group.next()
+        )
         let keepRunning = ManagedAtomic<Bool>(true)
         samples.whenComplete { _ in
             keepRunning.store(false, ordering: .relaxed)
@@ -155,7 +166,7 @@ final class ProfileRecorderTests: XCTestCase {
         }
         try await done
     }
-    
+
     func testSymbolsAreMangled() async throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
@@ -178,7 +189,7 @@ final class ProfileRecorderTests: XCTestCase {
                 }
             }
             self.logger.info("thread is ready")
-            
+
             let sampleBytes = try await ProfileRecorderSampler.sharedInstance.withSymbolizedSamplesInPerfScriptFormat(
                 sampleCount: 1,
                 timeBetweenSamples: .nanoseconds(0),
@@ -199,8 +210,12 @@ final class ProfileRecorderTests: XCTestCase {
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
 
         self.tempDirectory = NSTemporaryDirectory() + "/ProfileRecorderTests-\(UUID())"
-        XCTAssertNoThrow(try FileManager.default.createDirectory(atPath: self.tempDirectory,
-                                                                 withIntermediateDirectories: false))
+        XCTAssertNoThrow(
+            try FileManager.default.createDirectory(
+                atPath: self.tempDirectory,
+                withIntermediateDirectories: false
+            )
+        )
         self.logger = Logger(label: "ProfileRecorderTests")
     }
 

@@ -149,7 +149,7 @@ public struct ProfileRecorderSampleConverter: Sendable {
                     fclose(input)
                 }
             }
-            let output = toPath == "-" ? stdout: fopen(toPath, "w")
+            let output = toPath == "-" ? stdout : fopen(toPath, "w")
             guard let output = output else {
                 throw Error(message: "Could not open \(toPath), errno: \(errno)")
             }
@@ -211,12 +211,15 @@ public struct ProfileRecorderSampleConverter: Sendable {
                 }
                 switch line
                     .dropFirst(messageHeaderPrefixLength)
-                    .prefix(messageHeaderTypeLength) {
+                    .prefix(messageHeaderTypeLength)
+                {
                 case "MESG":
-                    guard let message = try? decoder.decode(
-                        Message.self,
-                        from: Data(line.dropFirst(messageHeaderLength).utf8)
-                    ) else {
+                    guard
+                        let message = try? decoder.decode(
+                            Message.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
                         continue
                     }
                     logger.info("\(message.message)")
@@ -224,18 +227,22 @@ public struct ProfileRecorderSampleConverter: Sendable {
                         throw Error(message: message.message)
                     }
                 case "CONF":
-                    guard let conf = try? decoder.decode(
-                        SampleConfig.self,
-                        from: Data(line.dropFirst(messageHeaderLength).utf8)
-                    ) else {
+                    guard
+                        let conf = try? decoder.decode(
+                            SampleConfig.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
                         continue
                     }
                     sampleConfig = conf
                 case "VERS":
-                    guard let version = try? decoder.decode(
-                        Version.self,
-                        from: Data(line.dropFirst(messageHeaderLength).utf8)
-                    ) else {
+                    guard
+                        let version = try? decoder.decode(
+                            Version.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
                         logger.error("Could not decode Swift Profile Recorder version", metadata: ["line": "\(line)"])
                         throw Error(message: "Could not decode Swift Profile Recorder version in '\(line)'")
                     }
@@ -244,10 +251,18 @@ public struct ProfileRecorderSampleConverter: Sendable {
                             "This is a Swift Profile Recorder trace of the wrong version, but we're only compatible with version 1",
                             metadata: ["trace-version": "\(version.version)", "our-version": "1"]
                         )
-                        throw Error(message: "Can only decode Swift Profile Recorder version 1 traces, this is \(version.version)")
+                        throw Error(
+                            message:
+                                "Can only decode Swift Profile Recorder version 1 traces, this is \(version.version)"
+                        )
                     }
                 case "VMAP":
-                    guard let mapping = try? decoder.decode(DynamicLibMapping.self, from: Data(line.dropFirst(messageHeaderLength).utf8)) else {
+                    guard
+                        let mapping = try? decoder.decode(
+                            DynamicLibMapping.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
                         continue
                     }
 
@@ -268,14 +283,27 @@ public struct ProfileRecorderSampleConverter: Sendable {
                             logger: logger
                         )
                     }
-                    guard let header = try? decoder.decode(SampleHeader.self, from: Data(line.dropFirst(messageHeaderLength).utf8)) else {
-                        logger.warning("failed to parse line, ignoring", metadata: ["line": "\(line.dropFirst(messageHeaderLength)))"])
+                    guard
+                        let header = try? decoder.decode(
+                            SampleHeader.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
+                        logger.warning(
+                            "failed to parse line, ignoring",
+                            metadata: ["line": "\(line.dropFirst(messageHeaderLength)))"]
+                        )
                         continue
                     }
 
                     currentSample = Sample(sampleHeader: header, stack: [])
                 case "STCK":
-                    guard let stackFrame = try? decoder.decode(StackFrame.self, from: Data(line.dropFirst(messageHeaderLength).utf8)) else {
+                    guard
+                        let stackFrame = try? decoder.decode(
+                            StackFrame.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
                         continue
                     }
                     currentSample?.stack.append(stackFrame)
@@ -314,7 +342,12 @@ public struct ProfileRecorderSampleConverter: Sendable {
                         }
                     }
                 default:
-                    logger.warning("unknown line, ignoring", metadata: ["line": "\(line.dropFirst(messageHeaderPrefixLength).prefix(messageHeaderTypeLength)))"])
+                    logger.warning(
+                        "unknown line, ignoring",
+                        metadata: [
+                            "line": "\(line.dropFirst(messageHeaderPrefixLength).prefix(messageHeaderTypeLength)))"
+                        ]
+                    )
                     continue
                 }
             }

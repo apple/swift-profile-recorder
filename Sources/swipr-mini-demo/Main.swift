@@ -93,12 +93,13 @@ struct ProfileRecorderMiniDemo: ParsableCommand & Sendable {
             }
         )
 
-        print("""
-              STARTING to \(self.iterations) iterations \
-              \(self.burnCPU ? ", burn CPU" : "") \
-              \(self.arrayAppends ? ", array appends" : "") \
-              \(self.blocking ? ", blocking" : "")
-              """
+        print(
+            """
+            STARTING to \(self.iterations) iterations \
+            \(self.burnCPU ? ", burn CPU" : "") \
+            \(self.arrayAppends ? ", array appends" : "") \
+            \(self.blocking ? ", blocking" : "")
+            """
         )
         let queue = DispatchQueue.global()
         for _ in 0..<self.iterations {
@@ -190,7 +191,7 @@ func runTravellingSalesman() -> Double {
         guard cities.count > 1 else { return 0.0 }
         var sum = 0.0
         for i in 0..<(cities.count - 1) {
-            sum += distanceBetweenCities(cities[i], cities[i+1])
+            sum += distanceBetweenCities(cities[i], cities[i + 1])
         }
         sum += distanceBetweenCities(cities.last!, cities.first!) // close the loop
         return sum
@@ -198,9 +199,11 @@ func runTravellingSalesman() -> Double {
 
     // MARK: - Recursive Search
 
-    func exploreRoutesRecursively(from currentCity: City,
-                                  remainingCities: [City],
-                                  visitedCities: [City]) -> Route {
+    func exploreRoutesRecursively(
+        from currentCity: City,
+        remainingCities: [City],
+        visitedCities: [City]
+    ) -> Route {
         if remainingCities.isEmpty {
             let fullRoute = visitedCities + [currentCity]
             return Route(
@@ -212,7 +215,7 @@ func runTravellingSalesman() -> Double {
         var bestRoute: Route? = nil
         for (index, nextCity) in remainingCities.enumerated() {
             let newRemainingCities = Array(
-                remainingCities[0..<index] + remainingCities[(index+1)...]
+                remainingCities[0..<index] + remainingCities[(index + 1)...]
             )
             let candidateRoute = exploreRoutesRecursively(
                 from: nextCity,
@@ -241,16 +244,16 @@ func runTravellingSalesman() -> Double {
     // MARK: - Demo Data
 
     let demoCities: [City] = [
-        City(name: "London",   x: 0.0,  y: 0.0),
-        City(name: "Paris",    x: 2.0,  y: 1.0),
-        City(name: "Berlin",   x: 5.0,  y: 1.5),
-        City(name: "Rome",     x: 6.0,  y: -2.0),
-        City(name: "Madrid",   x: -2.0, y: -1.5),
-        City(name: "Vienna",   x: 6.0,  y: 0.0),
-        City(name: "Prague",   x: 5.5,  y: 0.5),
-        City(name: "Amsterdam",x: 2.0,  y: 2.0),
-        City(name: "Brussels", x: 1.5,  y: 1.2),
-        City(name: "Zurich",   x: 4.0,  y: -0.5)
+        City(name: "London", x: 0.0, y: 0.0),
+        City(name: "Paris", x: 2.0, y: 1.0),
+        City(name: "Berlin", x: 5.0, y: 1.5),
+        City(name: "Rome", x: 6.0, y: -2.0),
+        City(name: "Madrid", x: -2.0, y: -1.5),
+        City(name: "Vienna", x: 6.0, y: 0.0),
+        City(name: "Prague", x: 5.5, y: 0.5),
+        City(name: "Amsterdam", x: 2.0, y: 2.0),
+        City(name: "Brussels", x: 1.5, y: 1.2),
+        City(name: "Zurich", x: 4.0, y: -0.5),
     ]
 
     // MARK: - Run

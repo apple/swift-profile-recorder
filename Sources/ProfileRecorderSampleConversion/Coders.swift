@@ -55,7 +55,13 @@ public struct DynamicLibMapping: Decodable & Sendable & CustomStringConvertible 
     public var segmentStartAddress: UInt
     public var segmentEndAddress: UInt
 
-    public init(path: String, architecture: String, segmentSlide: UInt, segmentStartAddress: UInt, segmentEndAddress: UInt) {
+    public init(
+        path: String,
+        architecture: String,
+        segmentSlide: UInt,
+        segmentStartAddress: UInt,
+        segmentEndAddress: UInt
+    ) {
         self.path = path
         self.architecture = architecture
         self.segmentSlide = segmentSlide
@@ -74,12 +80,16 @@ public struct DynamicLibMapping: Decodable & Sendable & CustomStringConvertible 
         } else {
             throw FailedToDecodeAddressError()
         }
-        if let startAddress = UInt(try container.decode(String.self, forKey: .segmentStartAddress).dropFirst(2), radix: 16) {
+        if let startAddress = UInt(
+            try container.decode(String.self, forKey: .segmentStartAddress).dropFirst(2),
+            radix: 16
+        ) {
             self.segmentStartAddress = startAddress
         } else {
             throw FailedToDecodeAddressError()
         }
-        if let endAddress = UInt(try container.decode(String.self, forKey: .segmentEndAddress).dropFirst(2), radix: 16) {
+        if let endAddress = UInt(try container.decode(String.self, forKey: .segmentEndAddress).dropFirst(2), radix: 16)
+        {
             self.segmentEndAddress = endAddress
         } else {
             throw FailedToDecodeAddressError()
@@ -92,13 +102,13 @@ public struct DynamicLibMapping: Decodable & Sendable & CustomStringConvertible 
 
     public var description: String {
         return """
-               DynamicLibMapping {\
-                path: '\(self.path)' (\(self.architecture)),\
-                segmentSlide: 0x\(String(self.segmentSlide, radix: 16)),\
-                segmentStart: 0x\(String(self.segmentStartAddress, radix: 16)),\
-                segmentEnd: 0x\(String(self.segmentEndAddress, radix: 16))\
-               }
-               """
+            DynamicLibMapping {\
+             path: '\(self.path)' (\(self.architecture)),\
+             segmentSlide: 0x\(String(self.segmentSlide, radix: 16)),\
+             segmentStart: 0x\(String(self.segmentStartAddress, radix: 16)),\
+             segmentEnd: 0x\(String(self.segmentEndAddress, radix: 16))\
+            }
+            """
     }
 }
 
@@ -155,10 +165,10 @@ public struct StackFrame: Codable & Sendable & CustomStringConvertible & Hashabl
 
     public var description: String {
         return """
-               StackFrame {\
-                ip: 0x\(String(self.instructionPointer, radix: 16)),\
-                sp: 0x\(String(self.stackPointer, radix: 16))\
-               }
-               """
+            StackFrame {\
+             ip: 0x\(String(self.instructionPointer, radix: 16)),\
+             sp: 0x\(String(self.stackPointer, radix: 16))\
+            }
+            """
     }
 }

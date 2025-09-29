@@ -23,9 +23,9 @@ import Dispatch
 #endif
 
 private let globalProfileRecorder: ProfileRecorderSampler = {
-#if canImport(CProfileRecorderSampler) // only on macOS & Linux
+    #if canImport(CProfileRecorderSampler) // only on macOS & Linux
     swipr_initialize()
-#endif
+    #endif
     return ProfileRecorderSampler()
 }()
 
@@ -41,12 +41,12 @@ public final class ProfileRecorderSampler: Sendable {
     private let threadPool: NIOThreadPool
 
     internal struct UnsupportedOperation: Error {}
-    
+
     /// A shared instance of a global in-process sampler.
     public static var sharedInstance: ProfileRecorderSampler {
         return globalProfileRecorder
     }
-    
+
     /// A Boolean value that indicates whether this is a supported platform.
     public static var isSupportedPlatform: Bool {
         #if os(Linux)
@@ -57,17 +57,19 @@ public final class ProfileRecorderSampler: Sendable {
         return false
         #endif
     }
-    
+
     fileprivate init() {
         self.threadPool = NIOThreadPool(numberOfThreads: 1)
         self.threadPool.start()
     }
 
-    private func requestSamples(output: CFilePointer,
-                                count: Int,
-                                timeBetweenSamples: TimeAmount,
-                                eventLoop: EventLoop) -> EventLoopFuture<Void> {
-#if canImport(CProfileRecorderSampler) // only on macOS & Linux
+    private func requestSamples(
+        output: CFilePointer,
+        count: Int,
+        timeBetweenSamples: TimeAmount,
+        eventLoop: EventLoop
+    ) -> EventLoopFuture<Void> {
+        #if canImport(CProfileRecorderSampler) // only on macOS & Linux
         return self.threadPool.runIfActive(eventLoop: eventLoop) {
             let ret = swipr_request_sample(output.handle, .init(count), .init(timeBetweenSamples.nanoseconds / 1000))
             fflush(output.handle)
@@ -75,11 +77,11 @@ public final class ProfileRecorderSampler: Sendable {
                 throw ProfileRecorderSamplerError(code: ret)
             }
         }
-#else
+        #else
         return eventLoop.makeFailedFuture(UnsupportedOperation())
-#endif
+        #endif
     }
-    
+
     /// Request and write the _raw_ samples to the output path you provide.
     ///
     /// - note: The samples will need to be symbolicated with `swipr-sample-conv`, alternatively use `ProfileRecorderServer` for automatically
@@ -92,24 +94,27 @@ public final class ProfileRecorderSampler: Sendable {
     ///   - timeBetweenSamples: The time between samples.
     ///   - queue: The dispatch queue on which to run the sampler.
     ///   - handler: A closure the library calls when the samples are ready, providing the results.
-    public func requestSamples(outputFilePath: String,
-                               failIfFileExists: Bool = true,
-                               count: Int,
-                               timeBetweenSamples: TimeAmount,
-                               queue: DispatchQueue,
-                               _ handler: @Sendable @escaping (Result<String, Error>) -> Void) {
-        self.requestSamples(outputFilePath: outputFilePath,
-                            failIfFileExists: failIfFileExists,
-                            count: count,
-                            timeBetweenSamples: timeBetweenSamples,
-                            eventLoop: MultiThreadedEventLoopGroup.singleton.any()
+    public func requestSamples(
+        outputFilePath: String,
+        failIfFileExists: Bool = true,
+        count: Int,
+        timeBetweenSamples: TimeAmount,
+        queue: DispatchQueue,
+        _ handler: @Sendable @escaping (Result<String, Error>) -> Void
+    ) {
+        self.requestSamples(
+            outputFilePath: outputFilePath,
+            failIfFileExists: failIfFileExists,
+            count: count,
+            timeBetweenSamples: timeBetweenSamples,
+            eventLoop: MultiThreadedEventLoopGroup.singleton.any()
         ).whenComplete { result in
             queue.async {
                 handler(result.map { outputFilePath })
             }
         }
     }
-    
+
     /// Request and write the _raw_ samples to the output path you provide.
     ///
     /// - note: The samples will need to be symbolicated with `swipr-sample-conv`, alternatively use `ProfileRecorderServer` for automatically
@@ -121,24 +126,32 @@ public final class ProfileRecorderSampler: Sendable {
     ///   - count: The number of samples to capture.
     ///   - timeBetweenSamples: The time between samples.
     ///   - eventLoop: The event loop on which the sampler runs.
-    public func requestSamples(outputFilePath: String,
-                               failIfFileExists: Bool = true,
-                               count: Int,
-                               timeBetweenSamples: TimeAmount,
-                               eventLoop: EventLoop) -> EventLoopFuture<Void> {
+    public func requestSamples(
+        outputFilePath: String,
+        failIfFileExists: Bool = true,
+        count: Int,
+        timeBetweenSamples: TimeAmount,
+        eventLoop: EventLoop
+    ) -> EventLoopFuture<Void> {
         if outputFilePath == "-" {
-            return self.requestSamples(output: CFilePointer(stderr),
-                                       count: count, timeBetweenSamples: timeBetweenSamples, eventLoop: eventLoop)
+            return self.requestSamples(
+                output: CFilePointer(stderr),
+                count: count,
+                timeBetweenSamples: timeBetweenSamples,
+                eventLoop: eventLoop
+            )
         } else {
             guard let outputRaw = fopen(outputFilePath, "w\(failIfFileExists ? "x" : "")") else {
                 return eventLoop.makeFailedFuture(CouldNotOpenFileError(path: outputFilePath))
             }
             let output = CFilePointer(outputRaw)
 
-            return self.requestSamples(output: output,
-                                       count: count,
-                                       timeBetweenSamples: timeBetweenSamples,
-                                       eventLoop: eventLoop).always { _ in
+            return self.requestSamples(
+                output: output,
+                count: count,
+                timeBetweenSamples: timeBetweenSamples,
+                eventLoop: eventLoop
+            ).always { _ in
                 fclose(output.handle)
             }
         }

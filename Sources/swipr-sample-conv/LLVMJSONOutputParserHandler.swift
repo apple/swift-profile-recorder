@@ -48,7 +48,8 @@ struct LLVMSymbolizerJSONOutput: Codable & Sendable {
             let offset = address >= startAddress ? address - startAddress : 0
 
             return GoodSymbol(
-                functionName: functionName.isEmpty ? "<unknown in \(self.FileName.flatMap { $0.isEmpty ? nil : $0 } ?? "empty")>": functionName,
+                functionName: functionName.isEmpty
+                    ? "<unknown in \(self.FileName.flatMap { $0.isEmpty ? nil : $0 } ?? "empty")>" : functionName,
                 offset: offset,
                 sourceFile: (self.FileName?.isEmpty ?? true) ? nil : self.FileName,
                 sourceLine: self.Line
@@ -83,19 +84,19 @@ final internal class LLVMJSONOutputParserHandler: ChannelInboundHandler {
             decoded = try self.jsonDecoder.decode(LLVMSymbolizerJSONOutput.self, from: data)
         } catch {
             fputs(
-                  """
-                  WARNING: failed to parse llvm-symbolizer JSON output (\(error)), got '\(data)'\n
-                  """,
-                  stderr
+                """
+                WARNING: failed to parse llvm-symbolizer JSON output (\(error)), got '\(data)'\n
+                """,
+                stderr
             )
             return
         }
         guard let addressString = decoded.Address, let address = UInt(hexDigits: addressString) else {
             fputs(
-                  """
-                  WARNING: unexpected llvm-symbolizer JSON output, got '\(data)'\n
-                  """,
-                  stderr
+                """
+                WARNING: unexpected llvm-symbolizer JSON output, got '\(data)'\n
+                """,
+                stderr
             )
             return
         }

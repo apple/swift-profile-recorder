@@ -70,7 +70,7 @@ extension ProfileRecorderSampler {
             case .perfSymbolized, .pprofSymbolized, .flamegraphCollapsedSymbolized:
                 let renderer: any ProfileRecorderSampleConversionOutputRenderer
                 switch format {
-                    case .perfSymbolized:
+                case .perfSymbolized:
                     renderer = PerfScriptOutputRenderer()
                 case .pprofSymbolized:
                     renderer = PprofOutputRenderer()
@@ -79,7 +79,11 @@ extension ProfileRecorderSampler {
                 case .raw:
                     fatalError("we shouldn't be here")
                 }
-                let converter = ProfileRecorderSampleConverter(config: .default, renderer: renderer, symbolizer: symbolizer)
+                let converter = ProfileRecorderSampleConverter(
+                    config: .default,
+                    renderer: renderer,
+                    symbolizer: symbolizer
+                )
                 try await converter.convert(
                     inputRawProfileRecorderFormatPath: rawSamplesPath.string,
                     outputPath: symbolisedSamplesPath.string,

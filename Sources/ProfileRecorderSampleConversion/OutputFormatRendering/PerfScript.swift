@@ -34,13 +34,15 @@ public struct PerfScriptOutputRenderer: ProfileRecorderSampleConversionOutputRen
         var output = ByteBuffer()
         output.reserveCapacity(256 + sample.stack.count * 128)
 
-        output.writeString("""
-                  \(sample.threadName)-T\(sample.tid)     \
-                  \(sample.pid)/\(sample.tid)     \
-                  \(formatSecAndNSec(sec: sample.timeSec, nsec: sample.timeNSec)):    \
-                  swipr
+        output.writeString(
+            """
+            \(sample.threadName)-T\(sample.tid)     \
+            \(sample.pid)/\(sample.tid)     \
+            \(formatSecAndNSec(sec: sample.timeSec, nsec: sample.timeNSec)):    \
+            swipr
 
-                  """)
+            """
+        )
         for stackFrame in sample.stack {
             let framesIncludingInlinedFrames = try symbolizer.symbolise(stackFrame).allFrames
             let hasMultiple = framesIncludingInlinedFrames.count > 1
@@ -48,16 +50,19 @@ public struct PerfScriptOutputRenderer: ProfileRecorderSampleConversionOutputRen
                 let symbolicatedFrame = framesIncludingInlinedFrames[index]
                 let isLast = index == framesIncludingInlinedFrames.endIndex - 1
 
-                output.writeString("""
-                      \t    \
-                      \(String(symbolicatedFrame.address, radix: 16)) \
-                      \(symbolicatedFrame.functionName)\(hasMultiple && !isLast ? " [inlined]" :"")\
-                      +0x\(String(symbolicatedFrame.functionOffset, radix: 16)) \
-                      (\(symbolicatedFrame.library))
+                output.writeString(
+                    """
+                    \t    \
+                    \(String(symbolicatedFrame.address, radix: 16)) \
+                    \(symbolicatedFrame.functionName)\(hasMultiple && !isLast ? " [inlined]" :"")\
+                    +0x\(String(symbolicatedFrame.functionOffset, radix: 16)) \
+                    (\(symbolicatedFrame.library))
 
-                      """)
+                    """
+                )
                 if configuration.includeFileLineInformation,
-                   let file = symbolicatedFrame.file, let line = symbolicatedFrame.line {
+                    let file = symbolicatedFrame.file, let line = symbolicatedFrame.line
+                {
                     output.writeString("  \(file):\(line)\n")
                 }
             }

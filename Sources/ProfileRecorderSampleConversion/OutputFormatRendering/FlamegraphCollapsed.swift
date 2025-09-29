@@ -52,4 +52,3 @@ public struct FlamegraphCollapsedOutputRenderer: ProfileRecorderSampleConversion
         return ByteBuffer()
     }
 }
-

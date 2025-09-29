@@ -57,12 +57,12 @@ final class PerfScriptTests: XCTestCase {
         )
 
         let expected = """
-                       thread-T2     1/2     4.000000005:    swipr
-                       \t    1345 fake+0x5 (libfoo)
-                       \t    1999 fake+0x5 (libfoo)
+            thread-T2     1/2     4.000000005:    swipr
+            \t    1345 fake+0x5 (libfoo)
+            \t    1999 fake+0x5 (libfoo)
 
 
-                       """
+            """
         XCTAssertEqual(expected, String(buffer: actual))
     }
 
@@ -100,12 +100,12 @@ final class PerfScriptTests: XCTestCase {
         )
 
         let expected = """
-                       thread-T2     1/2     4.987654321:    swipr
-                       \t    1345 fake+0x5 (libfoo)
-                       \t    1999 fake+0x5 (libfoo)
+            thread-T2     1/2     4.987654321:    swipr
+            \t    1345 fake+0x5 (libfoo)
+            \t    1999 fake+0x5 (libfoo)
 
 
-                       """
+            """
         XCTAssertEqual(expected, String(buffer: actual))
     }
 

@@ -20,38 +20,40 @@ import NIOConcurrencyHelpers
 public final class CoreSymbolicationSymboliser: Symbolizer & Sendable {
 
     private let cache: NIOLockedValueBox<[String: CSSymbolicatorRef]> = NIOLockedValueBox([:])
-    
+
     public init() {}
 
     public func start() throws {}
-    
+
     public func symbolise(
         fileVirtualAddressIP: UInt, // the offset to the instruction WITHOUT bass address
         library: DynamicLibMapping,
         logger: Logging.Logger
     ) throws -> SymbolisedStackFrame {
-        
+
         func makeFailed(_ why: String = "") -> SymbolisedStackFrame {
             return SymbolisedStackFrame(
-                allFrames: [SymbolisedStackFrame.SingleFrame(
-                    address: fileVirtualAddressIP,
-                    functionName: "unknown-missing\(why) @ 0x\(String(fileVirtualAddressIP, radix: 16))",
-                    functionOffset: 0,
-                    library: nil,
-                    vmap: library,
-                    file: nil,
-                    line: nil
-                )]
+                allFrames: [
+                    SymbolisedStackFrame.SingleFrame(
+                        address: fileVirtualAddressIP,
+                        functionName: "unknown-missing\(why) @ 0x\(String(fileVirtualAddressIP, radix: 16))",
+                        functionOffset: 0,
+                        library: nil,
+                        vmap: library,
+                        file: nil,
+                        line: nil
+                    )
+                ]
             )
         }
-        
+
         var symbolicator: CSSymbolicatorRef
         // acquire lock and check if symbolicator for this library is already cached
         // if so increment ref count so it's unaffected by release else where
         let cachedSymbolicator: CSSymbolicatorRef? = self.cache.withLockedValue { cache in
             return cache[library.path].map { CSRetain($0) }
         }
-        
+
         if cachedSymbolicator != nil {
             symbolicator = cachedSymbolicator!
         } else {
@@ -71,45 +73,47 @@ public final class CoreSymbolicationSymboliser: Symbolizer & Sendable {
                 }
             })
         }
-        
-        if CSIsNull(symbolicator){
+
+        if CSIsNull(symbolicator) {
             return makeFailed("-symbolicator")
         }
-        
+
         defer {
             CSRelease(symbolicator)
         }
-        
+
         let symbolOwner = CSSymbolicatorGetSymbolOwner(symbolicator)
-        if CSIsNull(symbolOwner){
+        if CSIsNull(symbolOwner) {
             return makeFailed("-symbol-owner")
         }
 
         // CS expects offset into library + base address from CS
         let baseAddress = CSSymbolOwnerGetBaseAddress(symbolOwner)
         let offset = fileVirtualAddressIP + library.segmentSlide - library.segmentStartAddress
-        
+
         let expectedIP = vm_address_t(offset) + baseAddress
 
         let symbol = CSSymbolicatorGetSymbolWithAddressAtTime(symbolicator, expectedIP)
-        if CSIsNull(symbol){
+        if CSIsNull(symbol) {
             return makeFailed("-symbol")
         }
         let name = CSSymbolGetMangledName(symbol) ?? "unknown"
 
         return SymbolisedStackFrame(
-            allFrames: [SymbolisedStackFrame.SingleFrame(
-                address: fileVirtualAddressIP,
-                functionName: name,
-                functionOffset: UInt(expectedIP),
-                library: nil,
-                vmap: library,
-                file: nil,
-                line: nil
-            )]
+            allFrames: [
+                SymbolisedStackFrame.SingleFrame(
+                    address: fileVirtualAddressIP,
+                    functionName: name,
+                    functionOffset: UInt(expectedIP),
+                    library: nil,
+                    vmap: library,
+                    file: nil,
+                    line: nil
+                )
+            ]
         )
     }
-    
+
     public func shutdown() throws {
         let allSyms = self.cache.withLockedValue { cache in
             let allValues = cache.values
@@ -120,7 +124,7 @@ public final class CoreSymbolicationSymboliser: Symbolizer & Sendable {
             CSRelease(syms)
         }
     }
-    
+
     public var description: String {
         return "CoreSymbolicationSymboliser"
     }

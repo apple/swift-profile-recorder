@@ -12,7 +12,7 @@ jobs:
       license_header_check_project_name: "Swift Profile Recorder"
       python_lint_check_enabled: false
       docs_check_enabled: false
-      format_check_enabled: false
+      format_check_enabled: true
 
   swift-test:
     name: Run tests

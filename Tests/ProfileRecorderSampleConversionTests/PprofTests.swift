@@ -96,12 +96,12 @@ final class PprofTests: XCTestCase {
 
     // MARK: - Helpers
     func instructionPointerFixup() -> Int {
-#if arch(arm) || arch(arm64)
+        #if arch(arm) || arch(arm64)
         // Known fixed-width instruction format
         return 4
-#else
+        #else
         // Unknown, subtract 1
         return 1
-#endif
+        #endif
     }
 }

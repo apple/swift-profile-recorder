@@ -98,19 +98,19 @@ public func asyncDo<R: Sendable>(
 
 public enum ProfileRecorderSystemInformation {
     public static var defaultArchitecture: String {
-#if arch(x86_64)
+        #if arch(x86_64)
         return "x86_64"
-#elseif arch(arm64)
+        #elseif arch(arm64)
         return "arm64"
-#elseif arch(arm64e)
+        #elseif arch(arm64e)
         return "arm64e"
-#elseif arch(arm64_32)
+        #elseif arch(arm64_32)
         return "arm64_32"
-#elseif arch(arm)
+        #elseif arch(arm)
         return "arm"
-#else
-#warning("unknown architecture")
+        #else
+        #warning("unknown architecture")
         return "unknown"
-#endif
+        #endif
     }
 }

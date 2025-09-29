@@ -49,14 +49,14 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
 
         let profile = Perftools_Profiles_Profile.with { profile in
             profile.location = self.aggregator.locations.values.sorted(by: { $0.id < $1.id }).map { location in
-                    .with {
-                        $0.id = UInt64(location.id)
-                        $0.line = location.functions.map { functionID in
-                            .with {
-                                $0.functionID = UInt64(functionID)
-                            }
+                .with {
+                    $0.id = UInt64(location.id)
+                    $0.line = location.functions.map { functionID in
+                        .with {
+                            $0.functionID = UInt64(functionID)
                         }
                     }
+                }
             }
             profile.function = self.aggregator.functions.values.sorted(by: { $0.id < $1.id }).map { function in
                 .with {
@@ -64,10 +64,12 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                     $0.name = Int64(stringTable[function.name]!.id)
                 }
             }
-            profile.sampleType = [.with {
-                $0.type = Int64(samplesID)
-                $0.unit = Int64(countID)
-            }]
+            profile.sampleType = [
+                .with {
+                    $0.type = Int64(samplesID)
+                    $0.unit = Int64(countID)
+                }
+            ]
             profile.sample = self.aggregator.samples.map { (inSample, count) in
                 Perftools_Profiles_Sample.with { outSample in
                     outSample.locationID = inSample.map { UInt64($0) }
@@ -78,8 +80,11 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                 $0.type = Int64(cpuID)
                 $0.unit = Int64(nanosecondsID)
             }
-            profile.timeNanos = (Int64(sampleConfiguration.currentTimeSeconds) * 1_000_000_000) + Int64(sampleConfiguration.currentTimeNanoseconds)
-            profile.durationNanos = Int64(sampleConfiguration.sampleCount) * Int64(sampleConfiguration.microSecondsBetweenSamples) * 1_000
+            profile.timeNanos =
+                (Int64(sampleConfiguration.currentTimeSeconds) * 1_000_000_000)
+                + Int64(sampleConfiguration.currentTimeNanoseconds)
+            profile.durationNanos =
+                Int64(sampleConfiguration.sampleCount) * Int64(sampleConfiguration.microSecondsBetweenSamples) * 1_000
             profile.period = Int64(sampleConfiguration.microSecondsBetweenSamples) * 1_000
 
             /*
