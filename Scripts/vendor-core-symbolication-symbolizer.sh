@@ -88,6 +88,7 @@ vendored_file_text='//===-------------------------------------------------------
 //
 //===----------------------------------------------------------------------===//
 // This file has been adjusted for ProfileRecorder, originally of the Swift.org open source project
+// swift-format-ignore-file
 '
 
 find . -name "swipr-core-symbolication.h" -exec gsed -ri \

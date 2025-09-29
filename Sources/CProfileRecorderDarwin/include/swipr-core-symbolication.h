@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 // This file has been adjusted for ProfileRecorder, originally of the Swift.org open source project
+// swift-format-ignore-file
 //===--- Darwin.h - Darwin specifics ----------------------------*- C++ -*-===//
 //
 // This source file is part of the Swift.org open source project

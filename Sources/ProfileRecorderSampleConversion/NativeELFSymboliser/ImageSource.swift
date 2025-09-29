@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 // This file has been adjusted for ProfileRecorder, originally of the Swift.org open source project
+// swift-format-ignore-file
 
 //===--- ImageSource.swift - A place from which to read image data --------===//
 //

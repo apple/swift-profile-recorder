@@ -112,6 +112,7 @@ vendored_file_text='//===-------------------------------------------------------
 //
 //===----------------------------------------------------------------------===//
 // This file has been adjusted for ProfileRecorder, originally of the Swift.org open source project
+// swift-format-ignore-file
 '
 
 find "$target_c_src" "$target_swift_src" \

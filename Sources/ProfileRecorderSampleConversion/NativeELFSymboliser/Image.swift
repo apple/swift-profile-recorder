@@ -12,6 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 // This file has been adjusted for ProfileRecorder, originally of the Swift.org open source project
+// swift-format-ignore-file
 
 //===--- Image.swift - Binary image protocol for Swift --------------------===//
 //
