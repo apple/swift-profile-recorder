@@ -6,7 +6,14 @@ import PackageDescription
 let package = Package(
     name: "swift-profile-recorder",
     platforms: [
-        .macOS(.v11), .iOS(.v14), .watchOS(.v7), .tvOS(.v14),
+        // supported
+        // Linux
+        .macOS(.v11),
+
+        // not supported, listed to make compilation work
+        .iOS(.v14),
+        .watchOS(.v7),
+        .tvOS(.v14),
     ],
     products: [
         .library(name: "ProfileRecorder", targets: ["ProfileRecorder"]),
