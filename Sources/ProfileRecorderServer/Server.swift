@@ -498,7 +498,7 @@ public struct ProfileRecorderServer: Sendable {
 
                 How to use it?
 
-                1. Open https://profiler.firefox.com and drag /tmp/samples.svg onto it.
+                1. Open https://profiler.firefox.com and drag /tmp/samples.perf onto it.
                 2. Click "Show all tracks" in "tracks" menu on the top left
                 3. Slightly further down, select the first thread (track), hold Shift and select the last thread.
                 4. Open the "Flame Graph" tab
@@ -562,7 +562,8 @@ public struct ProfileRecorderServer: Sendable {
                     decodedURI.queryParams["symbolizer"].flatMap { kind in
                         ProfileRecorderSymbolizerKind(rawValue: kind ?? "n/a")
                     } ?? (decodedURI.components.contains("symbolizer=fake") ? .fake : .native)
-                let sampleRate = 100.clamping(to: 0...1000) // 100 Hz, seems to be Golang's default
+                let sampleRate = (Int(decodedURI.queryParams["rate"].flatMap { $0 } ?? "not set") ?? 100)
+                    .clamping(to: 0...1000) // 100 Hz, seems to be Golang's default
                 let numberOfSamples = seconds * sampleRate
                 let timeIntervalBetweenSamplesMS = (1000 / sampleRate).clamping(to: 1...100_000)
 
