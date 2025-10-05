@@ -237,7 +237,7 @@ swipr_request_sample(FILE *output,
             (unsigned long long)current_time.tv_sec,
             (unsigned long long)current_time.tv_nsec);
 
-    swipr_os_dep_set_current_thread_name("ProfileRecorder-sampling");
+    swipr_os_dep_set_current_thread_name("swipr-sampling");
     for (size_t sample_no=0; sample_no<sample_count; sample_no++) {
         err = swipr_make_sample(minidumps, SWIPR_MAX_MUTATOR_THREADS, &num_minidumps);
         if (err) {
