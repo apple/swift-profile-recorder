@@ -87,7 +87,7 @@ swipr_state_abort_preparing(void) {
 static int
 swipr_dump_shared_objs(FILE *output) {
     size_t all_libs_count = 0;
-    struct swipr_dynamic_lib *all_libs = calloc(1024, sizeof(*all_libs));
+    struct swipr_dynamic_lib *all_libs = calloc(SWIPR_MAX_LIBS, sizeof(*all_libs));
     if (!all_libs) {
         return 1;
     }
