@@ -59,13 +59,15 @@ extension ProfileRecorderSampler {
             }
 
             logger.info("requesting raw samples")
-            try await self.requestSamples(
-                outputFilePath: rawSamplesPath.string,
-                failIfFileExists: true,
-                count: sampleCount,
-                timeBetweenSamples: timeBetweenSamples
-            )
-            logger.info("raw samples complete")
+            let sampleDuration = try await ContinuousClock().measure {
+                try await self.requestSamples(
+                    outputFilePath: rawSamplesPath.string,
+                    failIfFileExists: true,
+                    count: sampleCount,
+                    timeBetweenSamples: timeBetweenSamples
+                )
+            }
+            logger.info("raw samples complete", metadata: ["duration": "\(sampleDuration)"])
             switch format {
             case .perfSymbolized, .pprofSymbolized, .flamegraphCollapsedSymbolized:
                 let renderer: any ProfileRecorderSampleConversionOutputRenderer
@@ -84,13 +86,15 @@ extension ProfileRecorderSampler {
                     renderer: renderer,
                     symbolizer: symbolizer
                 )
-                try await converter.convert(
-                    inputRawProfileRecorderFormatPath: rawSamplesPath.string,
-                    outputPath: symbolisedSamplesPath.string,
-                    format: .perfSymbolized,
-                    logger: logger
-                )
-                logger.info("samples symbolicated")
+                let convertDuration = try await ContinuousClock().measure {
+                    try await converter.convert(
+                        inputRawProfileRecorderFormatPath: rawSamplesPath.string,
+                        outputPath: symbolisedSamplesPath.string,
+                        format: .perfSymbolized,
+                        logger: logger
+                    )
+                }
+                logger.info("samples symbolicated", metadata: ["duration": "\(convertDuration)"])
                 return try await body(symbolisedSamplesPath.string)
             case .raw:
                 return try await body(rawSamplesPath.string)

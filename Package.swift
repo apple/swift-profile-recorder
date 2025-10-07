@@ -8,7 +8,7 @@ let package = Package(
     platforms: [
         // supported
         // Linux
-        .macOS(.v11),
+        .macOS(.v13),
 
         // not supported, listed to make compilation work
         .iOS(.v14),
