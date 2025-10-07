@@ -319,9 +319,8 @@ public struct ProfileRecorderServer: Sendable {
         }
 
         let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
-        try symbolizer.start()
-        defer {
-            try! symbolizer.shutdown()
+        try await NIOThreadPool.singleton.runIfActive {
+            try symbolizer.start()
         }
 
         return try await asyncDo {
@@ -398,6 +397,9 @@ public struct ProfileRecorderServer: Sendable {
         } finally: { _ in
             if let udsPath = configuration.unixDomainSocketPath {
                 _ = try? await FileSystem.shared.removeItem(at: FilePath(udsPath))
+            }
+            try await NIOThreadPool.singleton.runIfActive {
+                try symbolizer.shutdown()
             }
         }
     }
