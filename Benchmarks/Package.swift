@@ -28,7 +28,7 @@ let package = Package(
         .target(
             name: "SampleWorkload",
             dependencies: [
-                .product(name: "Benchmark", package: "package-benchmark"),
+                .product(name: "Benchmark", package: "package-benchmark")
             ],
             path: "Benchmarks/SampleWorkload",
         ),
@@ -44,6 +44,6 @@ let package = Package(
             plugins: [
                 .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
             ]
-        )
+        ),
     ]
 )
