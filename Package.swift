@@ -61,7 +61,7 @@ let package = Package(
         .target(
             name: "_ProfileRecorderSampleConversion",
             dependencies: [
-                "ProfileRecorderSampleConversion",
+                "ProfileRecorderSampleConversion"
             ]
         ),
         .executableTarget(
