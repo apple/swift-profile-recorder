@@ -38,7 +38,7 @@ let package = Package(
                 "SampleWorkload",
                 .product(name: "Benchmark", package: "package-benchmark"),
                 .product(name: "ProfileRecorder", package: "swift-profile-recorder"),
-                .product(name: "ProfileRecorderSampleConversion", package: "swift-profile-recorder"),
+                .product(name: "_ProfileRecorderSampleConversion", package: "swift-profile-recorder"),
             ],
             path: "Benchmarks/ConversionBenchmarks",
             plugins: [

@@ -17,7 +17,7 @@ import Foundation
 import Logging
 import NIO
 import ProfileRecorder
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 import SampleWorkload
 
 let benchmarks = {
