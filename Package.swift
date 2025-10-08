@@ -18,6 +18,7 @@ let package = Package(
     products: [
         .library(name: "ProfileRecorder", targets: ["ProfileRecorder"]),
         .library(name: "ProfileRecorderServer", targets: ["ProfileRecorderServer"]),
+        .library(name: "ProfileRecorderSampleConversion", targets: ["ProfileRecorderSampleConversion"]),
         .executable(name: "swipr-sample-conv", targets: ["swipr-sample-conv"]),
     ],
     dependencies: [
