@@ -16,6 +16,7 @@ socket_path="$tmpdir/swipr.sock"
 PROFILE_RECORDER_SERVER_URL=unix://"$socket_path" \
     "$tmpdir"/build/release/swipr-mini-demo \
     --blocking --burn-cpu --array-appends \
+    --tsp true \
     --output "$output"/samples.swipr \
     --iterations 1000 \
     --profiling-server &
