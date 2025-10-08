@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import XCTest
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 
 final class SampleConversionTests: XCTestCase {
     func testBasicExample() {

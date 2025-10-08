@@ -19,7 +19,7 @@ import NIOConcurrencyHelpers
 import Logging
 import _NIOFileSystem
 @testable import ProfileRecorder
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 
 #if !canImport(Darwin)
 // We're using a terrible workaround to work around the lack of frame pointers

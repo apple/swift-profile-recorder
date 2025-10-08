@@ -15,7 +15,7 @@
 import NIO
 import NIOHTTP1
 import ProfileRecorder
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 import ProfileRecorderHelpers
 import _NIOFileSystem
 import Foundation

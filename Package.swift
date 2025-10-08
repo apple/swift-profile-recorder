@@ -45,7 +45,7 @@ let package = Package(
             ]
         ),
         .target(
-            name: "ProfileRecorderSampleConversion",
+            name: "_ProfileRecorderSampleConversion",
             dependencies: [
                 "ProfileRecorder",
                 "CProfileRecorderSwiftELF",
@@ -56,19 +56,14 @@ let package = Package(
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOExtras", package: "swift-nio-extras"),
-            ]
-        ),
-        .target(
-            name: "_ProfileRecorderSampleConversion",
-            dependencies: [
-                "ProfileRecorderSampleConversion"
-            ]
+            ],
+            path: "Sources/ProfileRecorderSampleConversion"
         ),
         .executableTarget(
             name: "swipr-sample-conv",
             dependencies: [
                 "CProfileRecorderSwiftELF",
-                "ProfileRecorderSampleConversion",
+                "_ProfileRecorderSampleConversion",
                 "ProfileRecorderHelpers",
                 "ProfileRecorder",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
@@ -84,7 +79,6 @@ let package = Package(
                 .targetItem(
                     name: "CProfileRecorderSampler",
                     // We currently only support Linux but we compile just fine on macOS too.
-                    // llvm unwind doesn't currently compile on watchOS, presumably because of arm64_32.
                     // Let's be a little conservative and allow-list macOS & Linux.
                     condition: .when(platforms: [.macOS, .linux])
                 ),
@@ -116,7 +110,7 @@ let package = Package(
                 .product(name: "_NIOFileSystem", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
                 "ProfileRecorder",
-                "ProfileRecorderSampleConversion",
+                "_ProfileRecorderSampleConversion",
                 "PprofFormat",
             ]
         ),
@@ -138,7 +132,7 @@ let package = Package(
             name: "ProfileRecorderTests",
             dependencies: [
                 "ProfileRecorder",
-                "ProfileRecorderSampleConversion",
+                "_ProfileRecorderSampleConversion",
                 "ProfileRecorderHelpers",
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "NIO", package: "swift-nio"),
@@ -151,7 +145,7 @@ let package = Package(
             dependencies: [
                 "ProfileRecorder",
                 "ProfileRecorderServer",
-                "ProfileRecorderSampleConversion",
+                "_ProfileRecorderSampleConversion",
                 "ProfileRecorderHelpers",
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "NIO", package: "swift-nio"),
@@ -164,7 +158,7 @@ let package = Package(
             name: "ProfileRecorderSampleConversionTests",
             dependencies: [
                 "ProfileRecorder",
-                "ProfileRecorderSampleConversion",
+                "_ProfileRecorderSampleConversion",
                 "ProfileRecorderHelpers",
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "NIO", package: "swift-nio"),

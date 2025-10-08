@@ -18,7 +18,7 @@
 import NIO
 import NIOFoundationCompat
 import Foundation
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 
 // {"Address":"0x8acec","ModuleName":"/lib/libc6-prof/aarch64-linux-gnu/libc.so.6","Symbol":[{"Column":7,"Discriminator":0,"FileName":"./malloc/./malloc/malloc.c","FunctionName":"sysmalloc_mmap","Line":2485,"StartAddress":"0x8ac60","StartFileName":"./malloc/./malloc/malloc.c","StartLine":2420}]}
 // {"Address":"0xffffffffffffffff","Error":{"Message":"No such file or directory"},"ModuleName":"/ignore/errors/about/this"}
