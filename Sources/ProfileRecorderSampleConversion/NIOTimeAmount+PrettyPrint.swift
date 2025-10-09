@@ -62,6 +62,30 @@ extension TimeAmount {
             return "\(fullNS)ns"
         }
     }
+
+    /// Returns a human-readable string representation of the time amount,
+    /// automatically choosing the best unit (s, ms, µs) with decimal precision.
+    var formattedString: String {
+        let fullNS = self.nanoseconds
+        guard fullNS != 0 else {
+            return "0ns"
+        }
+
+        let nsAsDouble = Double(fullNS)
+
+        if fullNS >= 1_000_000_000 {
+            let seconds = nsAsDouble / 1_000_000_000.0
+            return String(format: "%.3fs", seconds)
+        } else if fullNS >= 1_000_000 {
+            let milliseconds = nsAsDouble / 1_000_000.0
+            return String(format: "%.0fms", milliseconds)
+        } else if fullNS >= 1_000 {
+            let microseconds = nsAsDouble / 1_000.0
+            return String(format: "%.0fus", microseconds)
+        } else {
+            return "\(fullNS)ns"
+        }
+    }
 }
 
 struct TimeAmountConversionError: Error {

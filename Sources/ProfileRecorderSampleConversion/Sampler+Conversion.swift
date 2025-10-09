@@ -59,15 +59,15 @@ extension ProfileRecorderSampler {
             }
 
             logger.info("requesting raw samples")
-            let sampleDuration = try await ContinuousClock().measure {
-                try await self.requestSamples(
-                    outputFilePath: rawSamplesPath.string,
-                    failIfFileExists: true,
-                    count: sampleCount,
-                    timeBetweenSamples: timeBetweenSamples
-                )
-            }
-            logger.info("raw samples complete", metadata: ["duration": "\(sampleDuration)"])
+            let sampleStart = NIODeadline.now()
+            try await self.requestSamples(
+                outputFilePath: rawSamplesPath.string,
+                failIfFileExists: true,
+                count: sampleCount,
+                timeBetweenSamples: timeBetweenSamples
+            )
+            let sampleDuration = NIODeadline.now() - sampleStart
+            logger.info("raw samples complete", metadata: ["duration": "\(sampleDuration.formattedString)"])
             switch format {
             case .perfSymbolized, .pprofSymbolized, .flamegraphCollapsedSymbolized:
                 let renderer: any ProfileRecorderSampleConversionOutputRenderer
@@ -86,15 +86,15 @@ extension ProfileRecorderSampler {
                     renderer: renderer,
                     symbolizer: symbolizer
                 )
-                let convertDuration = try await ContinuousClock().measure {
-                    try await converter.convert(
-                        inputRawProfileRecorderFormatPath: rawSamplesPath.string,
-                        outputPath: symbolisedSamplesPath.string,
-                        format: .perfSymbolized,
-                        logger: logger
-                    )
-                }
-                logger.info("samples symbolicated", metadata: ["duration": "\(convertDuration)"])
+                let convertStart = NIODeadline.now()
+                try await converter.convert(
+                    inputRawProfileRecorderFormatPath: rawSamplesPath.string,
+                    outputPath: symbolisedSamplesPath.string,
+                    format: .perfSymbolized,
+                    logger: logger
+                )
+                let convertDuration = NIODeadline.now() - convertStart
+                logger.info("samples symbolicated", metadata: ["duration": "\(convertDuration.formattedString)"])
                 return try await body(symbolisedSamplesPath.string)
             case .raw:
                 return try await body(rawSamplesPath.string)
