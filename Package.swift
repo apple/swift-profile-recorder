@@ -50,7 +50,7 @@ let package = Package(
                 "ProfileRecorder",
                 "CProfileRecorderSwiftELF",
                 "CProfileRecorderDarwin",
-                "PprofFormat",
+                "ProfileRecorderPprofFormat",
                 "ProfileRecorderHelpers",
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "NIOFoundationCompat", package: "swift-nio"),
@@ -94,7 +94,7 @@ let package = Package(
             ]
         ),
         .target(
-            name: "PprofFormat",
+            name: "ProfileRecorderPprofFormat",
             dependencies: [
                 "ProfileRecorderHelpers",
                 .product(name: "SwiftProtobuf", package: "swift-protobuf"),
@@ -111,7 +111,7 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
                 "ProfileRecorder",
                 "_ProfileRecorderSampleConversion",
-                "PprofFormat",
+                "ProfileRecorderPprofFormat",
             ]
         ),
         .target(

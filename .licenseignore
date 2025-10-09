@@ -35,5 +35,5 @@ Snippets/*
 Misc/*
 Misc/Resources/*
 Scripts/*
-Sources/PprofFormat/profile.pb.swift
+Sources/ProfileRecorderPprofFormat/profile.pb.swift
 .unacceptablelanguageignore

@@ -13,7 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import NIO
-import PprofFormat
+import ProfileRecorderPprofFormat
 import SwiftProtobuf
 
 public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer {
