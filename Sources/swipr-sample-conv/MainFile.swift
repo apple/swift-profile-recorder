@@ -19,7 +19,7 @@ import ArgumentParser
 import Foundation
 import NIO
 import Logging
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 import ProfileRecorderHelpers
 import ProfileRecorder
 

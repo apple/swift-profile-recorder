@@ -15,7 +15,7 @@
 #if canImport(Glibc)
 @preconcurrency import Glibc // Sendability of stdout/stderr/..., needs to be at the top of the file
 #endif
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 import NIO
 import Foundation
 import Logging

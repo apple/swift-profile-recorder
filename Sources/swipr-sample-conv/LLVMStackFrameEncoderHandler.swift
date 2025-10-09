@@ -14,7 +14,7 @@
 
 import NIO
 import Foundation
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 import Logging
 
 struct LLVMSymbolizerQuery: Sendable {

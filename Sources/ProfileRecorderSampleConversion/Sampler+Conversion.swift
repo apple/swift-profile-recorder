@@ -13,6 +13,7 @@
 //===----------------------------------------------------------------------===//
 
 import ProfileRecorder
+import ProfileRecorderHelpers
 import Logging
 import NIO
 import _NIOFileSystem
@@ -123,17 +124,22 @@ extension ProfileRecorderSampler {
         _ body: (String) async throws -> R
     ) async throws -> R {
         let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
-        try symbolizer.start()
-        defer {
-            try! symbolizer.shutdown()
+        try await NIOThreadPool.singleton.runIfActive {
+            try symbolizer.start()
         }
-        return try await self._withSamples(
-            sampleCount: sampleCount,
-            timeBetweenSamples: timeBetweenSamples,
-            format: .perfSymbolized,
-            symbolizer: symbolizer,
-            logger: logger,
-            body
-        )
+        return try await asyncDo {
+            return try await self._withSamples(
+                sampleCount: sampleCount,
+                timeBetweenSamples: timeBetweenSamples,
+                format: .perfSymbolized,
+                symbolizer: symbolizer,
+                logger: logger,
+                body
+            )
+        } finally: { _ in
+            try await NIOThreadPool.singleton.runIfActive {
+                try symbolizer.shutdown()
+            }
+        }
     }
 }

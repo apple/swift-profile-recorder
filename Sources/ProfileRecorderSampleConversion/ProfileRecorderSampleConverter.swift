@@ -206,7 +206,7 @@ public struct ProfileRecorderSampleConverter: Sendable {
 
             while getline(&buffer, &bufferCapacity, input) != -1 {
                 let line = String(cString: buffer!)
-                guard line.starts(with: messageHeaderPrefix) else {
+                guard line.hasPrefix(messageHeaderPrefix) else {
                     continue
                 }
                 switch line
@@ -298,10 +298,17 @@ public struct ProfileRecorderSampleConverter: Sendable {
 
                     currentSample = Sample(sampleHeader: header, stack: [])
                 case "STCK":
+                    let json = line.dropFirst(messageHeaderLength).utf8
+
+                    // attempt the fast parser
+                    if let stackFrame = json.attemptFastParseStackFrame() {
+                        currentSample?.stack.append(stackFrame)
+                        continue
+                    }
                     guard
                         let stackFrame = try? decoder.decode(
                             StackFrame.self,
-                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                            from: Data(json)
                         )
                     else {
                         continue

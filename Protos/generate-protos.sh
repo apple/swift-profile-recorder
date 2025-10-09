@@ -18,6 +18,6 @@ set -eu
 here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 protoc \
     --swift_opt=Visibility=Public \
-    --swift_out="$here/../Sources/PprofFormat" \
+    --swift_out="$here/../Sources/ProfileRecorderPprofFormat" \
     -I "$here" \
     profile.proto

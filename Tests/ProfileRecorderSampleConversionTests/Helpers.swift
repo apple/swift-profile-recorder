@@ -12,7 +12,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-import ProfileRecorderSampleConversion
+import _ProfileRecorderSampleConversion
 import Logging
 
 final class FakeSymbolizer: Symbolizer {

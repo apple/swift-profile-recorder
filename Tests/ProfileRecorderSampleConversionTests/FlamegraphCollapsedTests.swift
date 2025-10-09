@@ -16,7 +16,7 @@ import Logging
 import XCTest
 import NIO
 
-@testable import ProfileRecorderSampleConversion
+@testable import _ProfileRecorderSampleConversion
 
 final class FlamegraphCollapsedScriptTests: XCTestCase {
     private var symbolizer: CachedSymbolizer! = nil
