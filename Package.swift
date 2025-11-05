@@ -22,15 +22,23 @@ let package = Package(
         // _ProfileRecorderSampleConversion is not part of public API, internal benchmark use
         .library(name: "_ProfileRecorderSampleConversion", targets: ["_ProfileRecorderSampleConversion"]),
     ],
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-log.git", from: "1.6.1"),
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.80.0"),
-        .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.24.1"),
-        .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.1"),
-        .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.25.2"),
-    ],
+    dependencies: {
+        var packageDependencies: [Package.Dependency] = [
+            .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.0.0"),
+            .package(url: "https://github.com/apple/swift-atomics.git", from: "1.0.0"),
+            .package(url: "https://github.com/apple/swift-log.git", from: "1.6.1"),
+            .package(url: "https://github.com/apple/swift-nio.git", from: "2.80.0"),
+            .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.24.1"),
+            .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.1"),
+            .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.25.2"),
+        ]
+        #if compiler(>=6.2)
+        packageDependencies.append(
+            .package(url: "https://github.com/apple/swift-configuration.git", .upToNextMinor(from: "0.2.0"))
+        )
+        #endif
+        return packageDependencies
+    }(),
     targets: [
         // MARK: - Executables
         .executableTarget(
@@ -102,17 +110,23 @@ let package = Package(
         ),
         .target(
             name: "ProfileRecorderServer",
-            dependencies: [
-                "ProfileRecorderHelpers",
-                .product(name: "NIO", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "_NIOFileSystem", package: "swift-nio"),
-                .product(name: "Logging", package: "swift-log"),
-                "ProfileRecorder",
-                "_ProfileRecorderSampleConversion",
-                "ProfileRecorderPprofFormat",
-            ]
+            dependencies: {
+                var profileRecorderServerTargetDeps: [Target.Dependency] = [
+                    "ProfileRecorderHelpers",
+                    .product(name: "NIO", package: "swift-nio"),
+                    .product(name: "NIOFoundationCompat", package: "swift-nio"),
+                    .product(name: "NIOHTTP1", package: "swift-nio"),
+                    .product(name: "_NIOFileSystem", package: "swift-nio"),
+                    .product(name: "Logging", package: "swift-log"),
+                    "ProfileRecorder",
+                    "_ProfileRecorderSampleConversion",
+                    "ProfileRecorderPprofFormat",
+                ]
+                #if compiler(>=6.2)
+                profileRecorderServerTargetDeps.append(.product(name: "Configuration", package: "swift-configuration"))
+                #endif
+                return profileRecorderServerTargetDeps
+            }()
         ),
         .target(
             name: "CProfileRecorderSwiftELF",

@@ -67,7 +67,7 @@ struct ProfileRecorderMiniDemo: ParsableCommand & Sendable {
             // at the beginning of your main function.
             profilingServerTask = Task {
                 async let _ = ProfileRecorderServer(
-                    configuration: try await .parseFromEnvironment()
+                    configuration: try .parseFromEnvironment()
                 ).runIgnoringFailures(logger: logger)
                 while !Task.isCancelled {
                     // sleep until cancelled

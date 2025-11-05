@@ -22,6 +22,9 @@ import Foundation
 import NIOFoundationCompat
 import NIOConcurrencyHelpers
 import Logging
+#if compiler(>=6.2)
+import Configuration
+#endif
 
 typealias ProfileRecorderServerRouteHandler = _ProfileRecorderServerRouteHandler
 
@@ -111,26 +114,92 @@ public struct ProfileRecorderServerConfiguration: Sendable {
         )
     }
 
-    /// Returns the configuration parsed from environment variables.
+    /// Parses `ProfileRecorderServerConfiguration` from environment variables.
     ///
-    /// Checks for the environment variables `PROFILE_RECORDER_SERVER_URL` for a URL with a socket and port,
-    /// or `PROFILE_RECORDER_SERVER_URL_PATTERN` to provide a UNIX domain socket over which to read the samples.
-    public static func parseFromEnvironment() async throws -> Self {
-        let serverURLString: String
+    /// ## Environment variables
+    /// - `PROFILE_RECORDER_SERVER_URL`
+    ///   A direct URL selecting the bind target. Supported schemes:
+    ///   - `unix:///tmp/path.sock`
+    ///   - `http+unix://%2ftmp%2fswipr.sock` (percent-encoded path, in the example `/tmp/swipr.sock`)
+    ///   - `http://host:port`
+    ///
+    /// - `PROFILE_RECORDER_SERVER_URL_PATTERN`
+    ///   Same as above, but may contain `{PID}` or `{UUID}` which are expanded at runtime.
+    ///
+    /// The direct URL key takes precedence over the pattern key.
+    /// If neither key is provided, the default configuration (no bind target) is returned.
+    /// The event loop group is always set to the shared singleton group.
+    ///
+    /// - Throws: Errors from `URL` parsing or socket address creation.
+    /// - Returns: The profile recorder server configuration.
+    public static func parseFromEnvironment() throws -> Self {
+        try Self._parseFromEnvironment(ProcessInfo.processInfo.environment)
+    }
 
-        if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL"], !string.isEmpty {
-            serverURLString = string
-        } else if let string = ProcessInfo.processInfo.environment["PROFILE_RECORDER_SERVER_URL_PATTERN"],
-            !string.isEmpty
-        {
-            serverURLString =
-                string
+    package static func _parseFromEnvironment(_ env: [String: String]) throws -> Self {
+        if let direct = env["PROFILE_RECORDER_SERVER_URL"] {
+            return try Self.parseBindTarget(from: direct, pattern: false)
+        }
+        if let pattern = env["PROFILE_RECORDER_SERVER_URL_PATTERN"] {
+            return try Self.parseBindTarget(from: pattern, pattern: true)
+        }
+        return .default
+    }
+
+    #if compiler(>=6.2)
+
+    /// Parses `ProfileRecorderServerConfiguration` from external configuration data via `ConfigReader`s.
+    ///
+    /// ## Optional configuration keys
+    /// - `profile.recorder.server.url`
+    ///   A direct URL selecting the bind target. Supports:
+    ///   - `unix:///tmp/path.sock`
+    ///   - `http+unix://%2ftmp%2fswipr.sock` (percent-encoded path, in the example `/tmp/swipr.sock`)
+    ///   - `http://host:port`
+    ///
+    /// - `profile.recorder.server.url.pattern`
+    ///   Same as above, but the value may contain `{PID}` or `{UUID}`,
+    ///   which are expanded at runtime.
+    ///
+    /// The direct URL key takes precedence over the pattern key.
+    /// If neither key is provided, the default configuration (no bind target) is returned.
+    /// The event loop group is always set to the shared singleton group.
+    ///
+    /// - Parameters:
+    ///   - configReader: The configuration reader.
+    /// - Throws: Errors from `URL` parsing or socket address creation.
+    /// - Returns: The profile recorder server configuration.
+    @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
+    public static func parseFromConfig(_ configReader: ConfigReader) throws -> Self {
+        if let directURL = configReader.string(forKey: "profile.recorder.server.url") {
+            return try Self.parseBindTarget(from: directURL, pattern: false)
+        }
+        if let patternURL = configReader.string(forKey: "profile.recorder.server.url.pattern") {
+            return try Self.parseBindTarget(from: patternURL, pattern: true)
+        }
+
+        return .default
+    }
+
+    #endif
+
+    /// Internal helper to parse and construct the bind target.
+    ///
+    /// Expands `{PID}` and `{UUID}` placeholders when `pattern == true`.
+    package static func parseBindTarget(from serverURLInput: String?, pattern: Bool) throws -> Self {
+        guard let serverURLInput, !serverURLInput.isEmpty else {
+            return .default
+        }
+
+        let serverURLString =
+            pattern
+            ? serverURLInput
                 .replacingOccurrences(of: "{PID}", with: "\(getpid())")
                 .replacingOccurrences(of: "{UUID}", with: "\(UUID().uuidString)")
-        } else {
-            return Self(group: .singleton, bindTarget: nil, unixDomainSocketPath: nil)
-        }
+            : serverURLInput
+
         let serverURL = URL(string: serverURLString)
+
         let bindTarget: SocketAddress
         switch serverURL?.scheme {
         case "http":
