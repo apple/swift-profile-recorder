@@ -335,7 +335,9 @@ public struct ProfileRecorderServer: Sendable {
                                 for try await child in server {
                                     childGroup.addTask {
                                         var logger = logger
-                                        logger[metadataKey: "peer"] = "\(child.channel.remoteAddress!)"
+                                        if let remoteAddress = child.channel.remoteAddress {
+                                            logger[metadataKey: "peer"] = "\(child.channel.remoteAddress!)"
+                                        }
                                         do {
                                             logger.info("profile recorder server connection received")
                                             try await child.executeThenClose {
