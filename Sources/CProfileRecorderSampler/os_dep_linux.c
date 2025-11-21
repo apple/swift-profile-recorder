@@ -29,6 +29,54 @@
 #include "interface.h"
 #include "common.h"
 
+// Check if a specific signal is blocked for a given thread.
+// Returns: 1 if signal is blocked, 0 if not blocked, -1 on error.
+static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum) {
+    if (signum < 1 || signum > 64) {
+        return -1;
+    }
+
+    char path[64];
+    snprintf(path, sizeof(path), "/proc/self/task/%d/status", tid);
+
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) {
+        return -1;
+    }
+
+    char buffer[4096];
+    ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
+    int close_result = close(fd);
+    if (bytes_read <= 0 || (close_result != 0 && !(close_result == -1 && errno == EINTR))) {
+        return -1;
+    }
+    buffer[bytes_read] = '\0';
+
+    // Find the SigBlk line
+    const char *sigblk_line = strstr(buffer, "\nSigBlk:");
+    if (!sigblk_line) {
+        sigblk_line = strstr(buffer, "SigBlk:");
+        if (!sigblk_line) {
+            return -1;
+        }
+    } else {
+        sigblk_line++; // Skip the newline
+    }
+
+    // Skip "SigBlk:" and whitespace
+    sigblk_line += 7;
+    while (*sigblk_line == ' ' || *sigblk_line == '\t') {
+        sigblk_line++;
+    }
+
+    // Parse the hexadecimal mask
+    unsigned long long mask = strtoull(sigblk_line, NULL, 16);
+
+    // Check if the signal bit is set (signals are 1-indexed)
+    int bit_position = signum - 1;
+    return (mask & (1ULL << bit_position)) ? 1 : 0;
+}
+
 struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
     struct thread_info *all_threads = calloc(sizeof(struct thread_info), SWIPR_MAX_MUTATOR_THREADS);
     if (!all_threads) {
@@ -61,6 +109,13 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
         
         pid_t tid = atol(ent->d_name);
         if (tid != 0 && tid != my_tid) {
+            // Check if SIGPROF is blocked for this thread
+            int sigprof_blocked = swipr_is_signal_blocked(tid, SIGPROF);
+            if (sigprof_blocked > 0) {
+                // Skip threads that have SIGPROF blocked
+                continue;
+            }
+
             int idx = next_index++;
             all_threads[idx].ti_id = tid;
             char file_path[128] = {0};

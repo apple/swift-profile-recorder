@@ -84,6 +84,53 @@ final class ProfileRecorderTests: XCTestCase {
         )
     }
 
+    func testSamplingWithThreadThatBlocksSIGPROF() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let threadReady = DispatchSemaphore(value: 0)
+        let threadUnblock = DispatchSemaphore(value: 0)
+        let threadDone = DispatchSemaphore(value: 0)
+
+        let blockingThread = Thread {
+            var set = sigset_t()
+            sigemptyset(&set)
+            sigaddset(&set, SIGPROF)
+            pthread_sigmask(SIG_BLOCK, &set, nil)
+
+            threadReady.signal()
+            threadUnblock.wait()
+            threadDone.signal()
+        }
+        blockingThread.start()
+
+        threadReady.wait()
+
+        let startTime = DispatchTime.now()
+        XCTAssertNoThrow(
+            try ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: "\(self.tempDirectory!)/samples.samples",
+                count: 10,
+                timeBetweenSamples: .nanoseconds(0),
+                eventLoop: self.group.next()
+            ).wait()
+        )
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - startTime.uptimeNanoseconds) / 1_000_000_000.0
+        XCTAssertLessThan(elapsed, 1.0, "Sampling took \(elapsed) seconds, expected < 1 second")
+
+        threadUnblock.signal()
+        threadDone.wait()
+
+        let sampleData = try await ByteBuffer(
+            contentsOf: FilePath("\(self.tempDirectory!)/samples.samples"),
+            maximumSizeAllowed: .mebibytes(32)
+        )
+        XCTAssertGreaterThan(sampleData.readableBytes, 0, "Sample file should not be empty")
+        let sampleString = String(buffer: sampleData)
+        XCTAssertTrue(sampleString.contains("[SWIPR] SMPL"), "Sample file should contain sample data")
+    }
+
     func testSamplingWhilstThreadsAreCreatedAndDying() throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
