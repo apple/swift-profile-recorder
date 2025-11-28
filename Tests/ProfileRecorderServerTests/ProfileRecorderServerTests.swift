@@ -58,6 +58,24 @@ final class ProfileRecorderServerTests: XCTestCase {
         }
     }
 
+    func testHealthEndpoint() async throws {
+        let server = ProfileRecorderServer(
+            configuration: try ProfileRecorderServerConfiguration.makeTCPListener(host: "127.0.0.1", port: 0)
+        )
+        try await server.withProfileRecordingServer(logger: Logger(label: "")) { server in
+            guard case .successful(let serverAddress) = server.startResult else {
+                XCTFail("failed to start server")
+                return
+            }
+
+            let response = try await HTTPClient.shared.get(
+                url: "http://127.0.0.1:\(serverAddress.port!)/health"
+            ).get()
+            XCTAssertEqual(.ok, response.status)
+            XCTAssertEqual(ByteBuffer(string: "OK"), response.body)
+        }
+    }
+
     func testUserExtraHandlerBasic() async throws {
         let server = ProfileRecorderServer(
             configuration: try ProfileRecorderServerConfiguration.makeTCPListener(host: "127.0.0.1", port: 0)

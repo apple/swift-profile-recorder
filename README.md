@@ -90,6 +90,7 @@ Below, some compatible visualisation tools:
 
 - pprof's [`/debug/pprof/profile` endpoint](https://pkg.go.dev/net/http/pprof)
 - Swift Profile Recorder's own `/sample` endpoint
+- `/health` endpoint for health checks (returns `200 OK`)
 
 ## Example profiles
 
