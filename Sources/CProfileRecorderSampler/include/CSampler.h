@@ -17,9 +17,19 @@
 
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 
-int swipr_request_sample(FILE *output,
-                         size_t sample_count,
+struct swipr_per_sample_information;
+
+size_t swipr_per_sample_information_get_samples_taken(struct swipr_per_sample_information * _Nonnull per_sample_info);
+
+int swipr_request_sample(FILE * _Nonnull output,
+                         bool (* _Nonnull should_take_more_samples)(
+                                                          void * _Nullable context,
+                                                          struct swipr_per_sample_information * _Nonnull per_sample_info
+                                                          ),
+                         void * _Nullable context,
+                         size_t sample_count_hint,
                          useconds_t usecs_between_samples);
 int swipr_initialize(void);
 

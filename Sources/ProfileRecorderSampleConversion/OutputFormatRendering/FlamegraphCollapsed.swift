@@ -46,6 +46,7 @@ public struct FlamegraphCollapsedOutputRenderer: ProfileRecorderSampleConversion
 
     public func finalise(
         sampleConfiguration: SampleConfig,
+        sampleSummary: SampleSummary,
         configuration: ProfileRecorderSampleConversionConfiguration,
         symbolizer: CachedSymbolizer
     ) -> ByteBuffer {

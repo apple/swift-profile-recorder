@@ -167,8 +167,9 @@ public struct ProfileRecorderSampleConverter: Sendable {
                 currentTimeSeconds: 0,
                 currentTimeNanoseconds: 0,
                 microSecondsBetweenSamples: 1,
-                sampleCount: 0
+                sampleCount: nil
             )
+            var sampleSummary = SampleSummary(sampleCount: 0)
             var vmaps: [DynamicLibMapping] = []
             var vmapsRead = true
             var currentSample: Sample? = nil
@@ -186,6 +187,7 @@ public struct ProfileRecorderSampleConverter: Sendable {
                     do {
                         let renderedSample = try self.renderer.finalise(
                             sampleConfiguration: sampleConfig,
+                            sampleSummary: sampleSummary,
                             configuration: config,
                             symbolizer: symboliser
                         )
@@ -236,6 +238,16 @@ public struct ProfileRecorderSampleConverter: Sendable {
                         continue
                     }
                     sampleConfig = conf
+                case "SMRY":
+                    guard
+                        let summary = try? decoder.decode(
+                            SampleSummary.self,
+                            from: Data(line.dropFirst(messageHeaderLength).utf8)
+                        )
+                    else {
+                        continue
+                    }
+                    sampleSummary = summary
                 case "VERS":
                     guard
                         let version = try? decoder.decode(
