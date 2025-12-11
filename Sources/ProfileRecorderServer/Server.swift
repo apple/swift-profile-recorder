@@ -130,9 +130,12 @@ public struct ProfileRecorderServerConfiguration: Sendable {
     /// If neither key is provided, the default configuration (no bind target) is returned.
     /// The event loop group is always set to the shared singleton group.
     ///
+    /// - Note: Currently synchronous, but marked `async` for API stability and to allow future
+    ///   enhancements (e.g., DNS resolution, file I/O) without breaking API changes.
+    ///
     /// - Throws: Errors from `URL` parsing or socket address creation.
     /// - Returns: The profile recorder server configuration.
-    public static func parseFromEnvironment() throws -> Self {
+    public static func parseFromEnvironment() async throws -> Self {
         try Self._parseFromEnvironment(ProcessInfo.processInfo.environment)
     }
 
