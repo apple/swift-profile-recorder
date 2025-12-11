@@ -34,7 +34,7 @@ let package = Package(
         ]
         #if compiler(>=6.2)
         packageDependencies.append(
-            .package(url: "https://github.com/apple/swift-configuration.git", .upToNextMinor(from: "0.2.0"))
+            .package(url: "https://github.com/apple/swift-configuration.git", from: "1.0.0")
         )
         #endif
         return packageDependencies
