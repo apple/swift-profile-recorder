@@ -167,25 +167,25 @@ struct ProfileRecorderConfigurationTests {
 
     @Test("ConfigReader: direct URL key")
     @available(macOS 15, *)
-    func configDirectURLKey() throws {
+    func configDirectURLKey() async throws {
         let reader = ConfigReader(
             provider: InMemoryProvider(values: [
                 ["profile", "recorder", "server", "url"]: .init(stringLiteral: "unix:///tmp/cfg.sock")
             ])
         )
-        let cfg = try ProfileRecorderServerConfiguration.parseFromConfig(reader)
+        let cfg = try await ProfileRecorderServerConfiguration.parseFromConfig(reader)
         #expect(unixPath(cfg.bindTarget) == "/tmp/cfg.sock")
     }
 
     @Test("ConfigReader: pattern key")
     @available(macOS 15, *)
-    func configPatternURLKey() throws {
+    func configPatternURLKey() async throws {
         let reader = ConfigReader(
             provider: InMemoryProvider(values: [
                 ["profile", "recorder", "server", "url", "pattern"]: .init(stringLiteral: "unix:///{PID}-{UUID}.sock")
             ])
         )
-        let cfg = try ProfileRecorderServerConfiguration.parseFromConfig(reader)
+        let cfg = try await ProfileRecorderServerConfiguration.parseFromConfig(reader)
         let path = try #require(unixPath(cfg.bindTarget))
         #expect(path.contains("\(getpid())"))
         #expect(path.hasSuffix(".sock"))
@@ -193,22 +193,22 @@ struct ProfileRecorderConfigurationTests {
 
     @Test("ConfigReader: direct key takes precedence")
     @available(macOS 15, *)
-    func configDirectPrecedenceOverPattern() throws {
+    func configDirectPrecedenceOverPattern() async throws {
         let reader = ConfigReader(
             provider: InMemoryProvider(values: [
                 ["profile", "recorder", "server", "url"]: .init(stringLiteral: "unix:///tmp/direct.cfg.sock"),
                 ["profile", "recorder", "server", "url", "pattern"]: .init(stringLiteral: "unix:///{PID}.sock"),
             ])
         )
-        let cfg = try ProfileRecorderServerConfiguration.parseFromConfig(reader)
+        let cfg = try await ProfileRecorderServerConfiguration.parseFromConfig(reader)
         #expect(unixPath(cfg.bindTarget) == "/tmp/direct.cfg.sock")
     }
 
     @Test("ConfigReader: defaults when neither key present")
     @available(macOS 15, *)
-    func configDefaultsWhenMissingKeys() throws {
+    func configDefaultsWhenMissingKeys() async throws {
         let reader = ConfigReader(provider: InMemoryProvider(values: [:]))
-        let cfg = try ProfileRecorderServerConfiguration.parseFromConfig(reader)
+        let cfg = try await ProfileRecorderServerConfiguration.parseFromConfig(reader)
         #expect(cfg.bindTarget == nil)
     }
 

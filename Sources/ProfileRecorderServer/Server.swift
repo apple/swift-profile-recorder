@@ -130,9 +130,6 @@ public struct ProfileRecorderServerConfiguration: Sendable {
     /// If neither key is provided, the default configuration (no bind target) is returned.
     /// The event loop group is always set to the shared singleton group.
     ///
-    /// - Note: Currently synchronous, but marked `async` for API stability and to allow future
-    ///   enhancements (e.g., DNS resolution, file I/O) without breaking API changes.
-    ///
     /// - Throws: Errors from `URL` parsing or socket address creation.
     /// - Returns: The profile recorder server configuration.
     public static func parseFromEnvironment() async throws -> Self {
@@ -173,11 +170,11 @@ public struct ProfileRecorderServerConfiguration: Sendable {
     /// - Throws: Errors from `URL` parsing or socket address creation.
     /// - Returns: The profile recorder server configuration.
     @available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *)
-    public static func parseFromConfig(_ configReader: ConfigReader) throws -> Self {
-        if let directURL = configReader.string(forKey: "profile.recorder.server.url") {
+    public static func parseFromConfig(_ configReader: ConfigReader) async throws -> Self {
+        if let directURL = try await configReader.fetchString(forKey: "profile.recorder.server.url") {
             return try Self.parseBindTarget(from: directURL, pattern: false)
         }
-        if let patternURL = configReader.string(forKey: "profile.recorder.server.url.pattern") {
+        if let patternURL = try await configReader.fetchString(forKey: "profile.recorder.server.url.pattern") {
             return try Self.parseBindTarget(from: patternURL, pattern: true)
         }
 
