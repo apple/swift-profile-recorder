@@ -26,7 +26,7 @@ This allows you to retrieve symbolicated samples with a single `curl` (or any ot
 
 ##### One-off setup to get your application ready for sampling
 
-- Add a `swift-profile-recorder` dependency: `.package(url: "https://github.com/apple/swift-profile-recorder.git", .upToNextMinor(from: "0.3.0"))`
+- Add a `swift-profile-recorder` dependency: `.package(url: "https://github.com/apple/swift-profile-recorder.git", .upToNextMinor(from: "0.3.13"))`
 - Make your main `executableTarget` depend on `ProfileRecorderServer`: `.product(name: "ProfileRecorderServer", package: "swift-profile-recorder"),`
 - Add the following few lines at the very beginning of your main function (`static func main()` or `func run()`):
 
@@ -130,7 +130,7 @@ index ae0b6d2..33b24ed 100644
 +++ b/hello/Package.swift
 @@ -11,2 +11,3 @@ let package = Package(
          .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.4.0"),
-+        .package(url: "git@github.com:apple/swift-profile-recorder.git", branch: "main"),
++        .package(url: "https://github.com/apple/swift-profile-recorder.git", .upToNextMinor(from: "0.3.13")),
      ],
 @@ -18,2 +19,3 @@ let package = Package(
                  .product(name: "Hummingbird", package: "hummingbird"),
