@@ -148,6 +148,7 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/\<STN_/internal_${prefix}_STN_/g" \
         -e "s/\<STT_/internal_${prefix}_STT_/g" \
         -e "s/\<STV_/internal_${prefix}_STV_/g" \
+        -e "s/@available(.*)//g" \
         -e "s/import Swift//g" \
         -e "s/^let ELF64_/nonisolated(unsafe) let ELF64_/g" \
         -e "s/^let ELF32_/nonisolated(unsafe) let ELF32_/g" \
@@ -159,6 +160,9 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/internal import BacktracingImpl.OS.Darwin//g" \
         -e "s/swift\.runtime\./CProfileRecorderSwiftELF./g" \
         -e "s/internal import/import/g" \
+        -e "s/_swift_open/open/g" \
+        -e "s/_swift_get_errno\(\)/errno/g" \
+        -e "s/mach_task_self\(\)/mach_task_self_/g" \
         -e "s/typealias SourceLocation = SymbolicatedBacktrace.SourceLocation//g" \
         -e "s/@_specialize\(kind: full, where R == RemoteMemoryReader\)//g" \
         -e "s/@_specialize\(kind: full, where R == MemserverMemoryReader\)//g" \
@@ -172,4 +176,84 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/^#if os\(macOS\) \|\| os\(iOS\) \|\| os\(tvOS\) \|\| os\(watchOS\)$/#if canImport(Darwin)/g" \
         -e "1s%^%$(echo "$vendored_file_text" | tr '\n' '%' | sed 's/%/\\n/g')%" \
         '{}' \;
+
+# Comment out compression-related code in Elf.swift (unsupported features)
+elf_swift="$target_swift_src/Elf.swift"
+
+awk '
+# Comment out .gnu_debugdata block
+/if let debugData = getSection\("\.gnu_debugdata"\)/ {
+    print "/*"
+    in_debugdata = 1
+    brace_count = 0
+}
+in_debugdata {
+    print
+    brace_count += gsub(/{/, "{")
+    brace_count -= gsub(/}/, "}")
+    if (brace_count == 0) {
+        print "*/"
+        in_debugdata = 0
+    }
+    next
+}
+
+# Replace elfCompressedImageSource with () // compression unsupported
+/return try ImageSource\(elfCompressedImageSource:/ {
+    print "              () // compression unsupported"
+    getline  # skip the traits: line
+    next
+}
+
+# Comment out zname == sname block
+/if zname == sname \{/ {
+    print "/*"
+    in_zname = 1
+    zname_brace = 0
+}
+in_zname {
+    print
+    zname_brace += gsub(/{/, "{")
+    zname_brace -= gsub(/}/, "}")
+    if (zname_brace == 0) {
+        print "*/"
+        in_zname = 0
+    }
+    next
+}
+
+# Comment out CompressedImageSourceError catch blocks (keep the } before catch)
+/\} catch let CompressedImageSourceError\.libraryNotFound/ {
+    print "      }"
+    print "/*"
+    print "      catch let CompressedImageSourceError.libraryNotFound(library) {"
+    in_catch = 1
+    next
+}
+in_catch {
+    print
+    if (/\} catch \{/) {
+        prev_was_catch_open = 1
+    } else if (/^[[:space:]]*\}[[:space:]]*$/ && prev_was_catch_open) {
+        print "*/"
+        in_catch = 0
+        prev_was_catch_open = 0
+    } else {
+        prev_was_catch_open = 0
+    }
+    next
+}
+
+{ print }
+' "$elf_swift" > "$elf_swift.tmp" && mv "$elf_swift.tmp" "$elf_swift"
+
+# Truncate MemoryReader.swift - remove new platform-specific memory readers
+# Keep only up to the end of "extension MemoryReader { ... }"
+memory_reader="$target_swift_src/MemoryReader.swift"
+awk '
+/^extension MemoryReader/ { in_extension = 1 }
+in_extension && /^}$/ { print; exit }
+{ print }
+' "$memory_reader" > "$memory_reader.tmp" && mv "$memory_reader.tmp" "$memory_reader"
+
 echo "Okay, all done."

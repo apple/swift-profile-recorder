@@ -33,12 +33,13 @@
 
 
 
-struct ImageSymbol: Sendable & Hashable {
+struct ImageSymbol {
   var name: String
   var offset: Int
 }
 
-internal protocol Image {
+
+protocol Image {
   typealias UUID = [UInt8]
   typealias Address = ImageSource.Address
 
@@ -82,6 +83,7 @@ internal protocol Image {
 
   func lookupSymbol(address: Address) -> ImageSymbol?
 }
+
 
 extension Image {
   public func swapIfRequired<T: FixedWidthInteger>(_ x: T) -> T {

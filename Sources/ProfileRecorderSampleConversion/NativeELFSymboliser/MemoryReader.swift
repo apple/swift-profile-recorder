@@ -37,17 +37,20 @@
 import Darwin
 #elseif os(Windows)
 import ucrt
+import WinSDK
 #elseif canImport(Glibc)
-@preconcurrency import Glibc
+import Glibc
 #elseif canImport(Musl)
-@preconcurrency import Musl
+import Musl
 #endif
 
 #if os(macOS)
 
 #endif
 
-@_spi(MemoryReaders) public protocol MemoryReader {
+@_spi(MemoryReaders)
+
+public protocol MemoryReader {
   typealias Address = UInt64
   typealias Size = UInt64
 
@@ -77,6 +80,7 @@ import ucrt
   /// Fetch a fixed-length string from the specified location in the source
   func fetchString(from addr: Address, length: Int) throws -> String?
 }
+
 
 extension MemoryReader {
 

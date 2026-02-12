@@ -185,7 +185,7 @@ typedef internal_SWIPR_DWARF_ENUM(SWIPR_Dwarf_Byte, SWIPR_Dwarf_ChildDeterminati
 /* .. Attribute Encodings ................................................... */
 
 // Table 7.5
-typedef enum internal_SWIPR_DWARF_EXTENSIBLE_ENUM SWIPR_Dwarf_Attribute {
+typedef internal_SWIPR_DWARF_ENUM(SWIPR_Dwarf_Word, SWIPR_Dwarf_Attribute) {
   internal_SWIPR_DW_AT_sibling                 = 0x01, // reference
   internal_SWIPR_DW_AT_location                = 0x02, // exprloc, loclist
   internal_SWIPR_DW_AT_name                    = 0x03, // string

@@ -36,20 +36,26 @@
 import Darwin
 #elseif os(Windows)
 import ucrt
+import WinSDK
 #elseif canImport(Glibc)
-@preconcurrency import Glibc
+import Glibc
 #elseif canImport(Musl)
-@preconcurrency import Musl
+import Musl
 #endif
 
 enum ImageSourceError: Error {
   case outOfBoundsRead
+  #if os(Windows)
+  case win32Error(DWORD)
+  #else
   case posixError(Int32)
+  #endif
 }
 
-struct ImageSource {
 
-  private class Storage {
+struct ImageSource: CustomStringConvertible {
+
+  private class Storage: CustomStringConvertible {
     /// Says how we allocated the buffer.
     private enum MemoryBufferKind {
       /// Currently empty
@@ -148,6 +154,51 @@ struct ImageSource {
     }
 
     convenience init(path: String) throws {
+      #if os(Windows)
+      let hFile =
+        path.withCString(encodedAs: UTF16.self) { lpwszPath in
+          CreateFileW(lpwszPath,
+                      GENERIC_READ,
+                      DWORD(FILE_SHARE_READ),
+                      nil,
+                      DWORD(OPEN_EXISTING),
+                      DWORD(FILE_ATTRIBUTE_NORMAL),
+                      nil)
+        }
+      if hFile == INVALID_HANDLE_VALUE {
+        throw ImageSourceError.win32Error(GetLastError())
+      }
+      defer {
+        CloseHandle(hFile)
+      }
+      var fileSize = LARGE_INTEGER()
+      if !GetFileSizeEx(hFile, &fileSize) {
+        throw ImageSourceError.win32Error(GetLastError())
+      }
+      let size = Int(fileSize.QuadPart)
+      let hMapping = CreateFileMappingW(hFile,
+                                        nil,
+                                        DWORD(PAGE_READONLY),
+                                        0, 0,
+                                        nil)
+      if hMapping == nil {
+        throw ImageSourceError.win32Error(GetLastError())
+      }
+      defer {
+        CloseHandle(hMapping)
+      }
+      let base = MapViewOfFile(hMapping,
+                               DWORD(FILE_MAP_READ),
+                               0, 0,
+                               0)
+      if base == nil {
+        CloseHandle(hMapping)
+        throw ImageSourceError.win32Error(GetLastError())
+      }
+
+      self.init(mapped: UnsafeRawBufferPointer(
+                  start: base, count: size))
+      #else
       let fd = open(path, O_RDONLY, 0)
       if fd < 0 {
         throw ImageSourceError.posixError(errno)
@@ -161,9 +212,9 @@ struct ImageSource {
       if base == nil || base! == UnsafeRawPointer(bitPattern: -1)! {
         throw ImageSourceError.posixError(errno)
       }
-
       self.init(mapped: UnsafeRawBufferPointer(
                   start: base, count: Int(size)))
+      #endif
     }
 
     deinit {
@@ -171,8 +222,12 @@ struct ImageSource {
         case .allocated:
           mutableBytes.deallocate()
         case .mapped:
+          #if os(Windows)
+          UnmapViewOfFile(UnsafeMutableRawPointer(mutating: bytes.baseAddress))
+          #else
           munmap(UnsafeMutableRawPointer(mutating: bytes.baseAddress),
                  bytes.count)
+          #endif
         case .substorage, .unowned, .empty:
           break
       }
@@ -280,6 +335,15 @@ struct ImageSource {
       dest.copyMemory(from: toAppend)
       kind = .allocated(newCount)
     }
+
+    var description: String {
+      switch kind {
+        case .empty:
+          return "Empty Storage"
+        default:
+          return "Storage of type \(kind) of \(count) bytes with buffer \(String(describing: bytes))"
+      }
+    }
   }
 
   /// The storage holding the image data.
@@ -302,6 +366,10 @@ struct ImageSource {
 
   /// If this ImageSource knows its path, this will be non-nil.
   private(set) var path: String?
+
+  var description: String {
+    return "ImageSource(storage: \(storage), isMappedImage: \(isMappedImage), path: \(String(describing: path))"
+  }
 
   /// Private initialiser, not for general use
   private init(storage: Storage, isMappedImage: Bool, path: String?) {
@@ -359,6 +427,7 @@ struct ImageSource {
 }
 
 // MemoryReader support
+
 extension ImageSource: MemoryReader {
   public func fetch(from address: Address,
                     into buffer: UnsafeMutableRawBufferPointer) throws {
@@ -395,6 +464,7 @@ extension ImageSource: MemoryReader {
 }
 
 /// Used as a cursor by the DWARF code
+
 struct ImageSourceCursor {
   typealias Address = ImageSource.Address
   typealias Size = ImageSource.Size

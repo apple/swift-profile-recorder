@@ -37,12 +37,13 @@ import Darwin
 #elseif os(Windows)
 import ucrt
 #elseif canImport(Glibc)
-@preconcurrency import Glibc
+import Glibc
 #elseif canImport(Musl)
-@preconcurrency import Musl
+import Musl
 #endif
 
-internal func hex<T: FixedWidthInteger>(_ value: T,
+@_spi(Utils)
+public func hex<T: FixedWidthInteger>(_ value: T,
                                         prefix shouldPrefix: Bool = true,
                                         width: Int = MemoryLayout<T>.size * 2)
   -> String {
@@ -54,7 +55,8 @@ internal func hex<T: FixedWidthInteger>(_ value: T,
   return "\(prefix)\(padding)\(digits)"
 }
 
-internal func hex(_ bytes: some Sequence<UInt8>) -> String {
+@_spi(Utils)
+public func hex(_ bytes: some Sequence<UInt8>) -> String {
   return bytes.map{ hex($0, prefix: false) }.joined(separator: "")
 }
 
@@ -75,7 +77,9 @@ func pad<T>(_ value: T, _ width: Int, align: PadAlignment = .left) -> String {
   }
 }
 
+#if os(Linux)
 @_spi(Utils)
+
 public func readString(from file: String) -> String? {
   let fd = open(file, O_RDONLY, 0)
   if fd < 0 {
@@ -100,8 +104,10 @@ public func readString(from file: String) -> String? {
 
   return String(decoding: bytes, as: UTF8.self)
 }
+#endif
 
 @_spi(Utils)
+
 public func stripWhitespace<S: StringProtocol>(_ s: S)
     -> S.SubSequence {
   guard let firstNonWhitespace = s.firstIndex(where: { !$0.isWhitespace })
@@ -110,6 +116,38 @@ public func stripWhitespace<S: StringProtocol>(_ s: S)
   }
   let lastNonWhitespace = s.lastIndex(where: { !$0.isWhitespace })!
   return s[firstNonWhitespace...lastNonWhitespace]
+}
+
+/// Escape a JSON string
+@_spi(Utils)
+public func escapeJSON(_ s: String) -> String {
+  var result = ""
+  let utf8View = s.utf8
+  var chunk = utf8View.startIndex
+  var pos = chunk
+  let end = utf8View.endIndex
+
+  result.reserveCapacity(utf8View.count)
+
+  while pos != end {
+    let scalar = utf8View[pos]
+    switch scalar {
+      case 0x22, 0x5c, 0x00...0x1f:
+        result += s[chunk..<pos]
+        result += "\\"
+        result += String(Unicode.Scalar(scalar))
+        pos = utf8View.index(after: pos)
+        chunk = pos
+      default:
+        pos = utf8View.index(after: pos)
+    }
+  }
+
+  if chunk != end {
+    result += s[chunk..<pos]
+  }
+
+  return result
 }
 
 /// Strip any Optional from a value.
