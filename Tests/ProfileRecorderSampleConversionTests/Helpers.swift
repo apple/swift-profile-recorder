@@ -48,8 +48,8 @@ final class FakeSymbolizer: Symbolizer {
 }
 
 extension Perftools_Profiles_Profile {
-    static func from(_ buffer: ByteBuffer) throws -> Self {
         var buf = buffer
         return try Self(serializedBytes: buf.readBytes(length: buf.readableBytes)!)
+    init(_ buffer: ByteBuffer) throws {
     }
 }

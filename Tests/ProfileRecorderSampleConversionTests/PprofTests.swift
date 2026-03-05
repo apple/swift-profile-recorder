@@ -88,7 +88,7 @@ final class PprofTests: XCTestCase {
             configuration: .default,
             symbolizer: self.symbolizer
         )
-        let profile = try Perftools_Profiles_Profile.from(output)
+        let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 1)
         XCTAssertEqual(profile.sample[0].label.count, 2, "Should have thread_id and thread_name labels")
     }
@@ -117,7 +117,7 @@ final class PprofTests: XCTestCase {
             configuration: .default,
             symbolizer: self.symbolizer
         )
-        let profile = try Perftools_Profiles_Profile.from(output)
+        let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 2, "Same stack from different threads should NOT be aggregated")
     }
 
@@ -145,7 +145,7 @@ final class PprofTests: XCTestCase {
             configuration: .default,
             symbolizer: self.symbolizer
         )
-        let profile = try Perftools_Profiles_Profile.from(output)
+        let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 1, "Same stack from same thread should be aggregated")
         XCTAssertEqual(profile.sample[0].value, [3])
     }
@@ -172,7 +172,7 @@ final class PprofTests: XCTestCase {
             configuration: .default,
             symbolizer: self.symbolizer
         )
-        let profile = try Perftools_Profiles_Profile.from(output)
+        let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 1)
 
         let sample = profile.sample[0]
@@ -218,7 +218,7 @@ final class PprofTests: XCTestCase {
             configuration: .default,
             symbolizer: self.symbolizer
         )
-        let profile = try Perftools_Profiles_Profile.from(output)
+        let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 3)
         let emittedNames = Set(
             profile.sample.compactMap { sample -> String? in
