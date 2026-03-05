@@ -257,7 +257,9 @@ public struct SymbolizerConfiguration: Sendable {
     public var perfScriptOutputWithFileLineInformation: Bool
 
     public static var `default`: SymbolizerConfiguration {
-        return SymbolizerConfiguration(perfScriptOutputWithFileLineInformation: false)
+        return SymbolizerConfiguration(
+            perfScriptOutputWithFileLineInformation: false
+        )
     }
 }
 

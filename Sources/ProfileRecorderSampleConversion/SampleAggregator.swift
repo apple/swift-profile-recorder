@@ -42,12 +42,29 @@ struct SampleAggregator: Sendable {
             return new
         }
     }
+
+    struct ThreadInfo: Sendable, Hashable {
+        var tid: Int
+        var name: String
+    }
+
+    struct SampleKey: Sendable, Hashable {
+        var locationIDs: [Int]
+        var threadInfo: ThreadInfo
+    }
+
     var locations: [UInt: Location] = [:]
     var functions: [String: Function] = [:]
-    var samples: [[Int]: Int] = [:]
+    var samples: [SampleKey: Int] = [:]
 
-    mutating func add(_ sample: [SymbolisedStackFrame]) {
-        let locationIDs = sample.compactMap { stackFrame -> Int? in
+    mutating func add(_ sample: [SymbolisedStackFrame], threadInfo: ThreadInfo) {
+        let locationIDs = self.resolveLocationIDs(sample)
+        let key = SampleKey(locationIDs: locationIDs, threadInfo: threadInfo)
+        self.samples[key, default: 0] += 1
+    }
+
+    private mutating func resolveLocationIDs(_ sample: [SymbolisedStackFrame]) -> [Int] {
+        return sample.compactMap { stackFrame -> Int? in
             guard let address = stackFrame.allFrames.first?.address else {
                 assertionFailure("empty stack? \(stackFrame)")
                 return nil
@@ -67,7 +84,6 @@ struct SampleAggregator: Sendable {
             )
             return nextID
         }
-        self.samples[locationIDs, default: 0] += 1
     }
 }
 

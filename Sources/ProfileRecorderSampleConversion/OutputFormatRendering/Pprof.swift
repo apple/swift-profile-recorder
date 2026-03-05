@@ -29,7 +29,8 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         let symbolisedStack = try sample.stack.map { frame in
             try symbolizer.symbolise(frame)
         }
-        self.aggregator.add(symbolisedStack)
+        let threadInfo = SampleAggregator.ThreadInfo(tid: sample.tid, name: sample.threadName)
+        self.aggregator.add(symbolisedStack, threadInfo: threadInfo)
         return ByteBuffer()
     }
 
@@ -46,6 +47,13 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         let countID = stringTable.addAndGetID("count", type: StringWithID.self)
         let cpuID = stringTable.addAndGetID("cpu", type: StringWithID.self)
         let nanosecondsID = stringTable.addAndGetID("nanoseconds", type: StringWithID.self)
+
+        // Thread label string table entries
+        let threadIDKeyID = stringTable.addAndGetID("thread_id", type: StringWithID.self)
+        let threadNameKeyID = stringTable.addAndGetID("thread_name", type: StringWithID.self)
+        for sampleKey in self.aggregator.samples.keys {
+            _ = stringTable.addAndGetID(sampleKey.threadInfo.name, type: StringWithID.self)
+        }
 
         let profile = Perftools_Profiles_Profile.with { profile in
             profile.location = self.aggregator.locations.values.sorted(by: { $0.id < $1.id }).map { location in
@@ -70,10 +78,26 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                     $0.unit = Int64(countID)
                 }
             ]
-            profile.sample = self.aggregator.samples.map { (inSample, count) in
+            profile.sample = self.aggregator.samples.map { (sampleKey, count) in
                 Perftools_Profiles_Sample.with { outSample in
-                    outSample.locationID = inSample.map { UInt64($0) }
+                    outSample.locationID = sampleKey.locationIDs.map { UInt64($0) }
                     outSample.value = [Int64(count)]
+                    outSample.label = [
+                        Perftools_Profiles_Label.with {
+                            $0.key = Int64(threadIDKeyID)
+                            $0.num = Int64(sampleKey.threadInfo.tid)
+                        },
+                        Perftools_Profiles_Label.with {
+                            if let entry = stringTable[sampleKey.threadInfo.name] {
+                                $0.key = Int64(threadNameKeyID)
+                                $0.str = Int64(entry.id)
+                            } else {
+                                assertionFailure(
+                                    "thread name '\(sampleKey.threadInfo.name)' missing from string table"
+                                )
+                            }
+                        },
+                    ]
                 }
             }
             profile.periodType = Perftools_Profiles_ValueType.with {

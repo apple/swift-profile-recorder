@@ -173,6 +173,7 @@ let package = Package(
             dependencies: [
                 "ProfileRecorder",
                 "_ProfileRecorderSampleConversion",
+                "ProfileRecorderPprofFormat",
                 "ProfileRecorderHelpers",
                 .product(name: "Atomics", package: "swift-atomics"),
                 .product(name: "NIO", package: "swift-nio"),

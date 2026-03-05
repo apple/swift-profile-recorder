@@ -117,7 +117,7 @@ final class PerfScriptTests: XCTestCase {
         self.underlyingSymbolizer = FakeSymbolizer()
         try self.underlyingSymbolizer!.start()
         self.symbolizer = CachedSymbolizer(
-            configuration: SymbolizerConfiguration(perfScriptOutputWithFileLineInformation: false),
+            configuration: .default,
             symbolizer: self.underlyingSymbolizer!,
             dynamicLibraryMappings: [
                 DynamicLibMapping(

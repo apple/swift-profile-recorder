@@ -14,6 +14,8 @@
 
 import _ProfileRecorderSampleConversion
 import Logging
+import NIO
+import ProfileRecorderPprofFormat
 
 final class FakeSymbolizer: Symbolizer {
     var description: String {
@@ -42,5 +44,12 @@ final class FakeSymbolizer: Symbolizer {
     }
 
     func shutdown() throws {
+    }
+}
+
+extension Perftools_Profiles_Profile {
+    static func from(_ buffer: ByteBuffer) throws -> Self {
+        var buf = buffer
+        return try Self(serializedBytes: buf.readBytes(length: buf.readableBytes)!)
     }
 }
