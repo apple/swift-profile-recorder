@@ -91,6 +91,13 @@ final class PprofTests: XCTestCase {
         let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 1)
         XCTAssertEqual(profile.sample[0].label.count, 2, "Should have thread_id and thread_name labels")
+
+        let nonZeroAddressLocations = profile.location.filter { $0.address != 0 }
+        XCTAssertEqual(
+            nonZeroAddressLocations.count,
+            2,
+            "Both valid instruction pointers should produce locations with addresses"
+        )
     }
 
     func testPprofSameStackDifferentThreads_NotAggregated() throws {

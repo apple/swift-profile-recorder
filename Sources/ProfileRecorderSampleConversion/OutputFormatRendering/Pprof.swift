@@ -59,6 +59,7 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
             profile.location = self.aggregator.locations.values.sorted(by: { $0.id < $1.id }).map { location in
                 .with {
                     $0.id = UInt64(location.id)
+                    $0.address = UInt64(location.address)
                     $0.line = location.functions.map { functionID in
                         .with {
                             $0.functionID = UInt64(functionID)
