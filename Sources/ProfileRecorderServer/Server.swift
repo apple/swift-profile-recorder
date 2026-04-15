@@ -18,8 +18,11 @@ import ProfileRecorder
 import _ProfileRecorderSampleConversion
 import ProfileRecorderHelpers
 import _NIOFileSystem
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
-import NIOFoundationCompat
+#endif
 import NIOConcurrencyHelpers
 import Logging
 #if compiler(>=6.2)
@@ -653,7 +656,9 @@ public struct ProfileRecorderServer: Sendable {
                     oneOfPaths: [["sample"], ["samples"]]
                 ) != nil:
                 // Native Swift Profile Recorder Sampling server
-                sampleRequest = try JSONDecoder().decode(SampleRequest.self, from: request.body ?? ByteBuffer())
+                let body = request.body ?? ByteBuffer()
+                let bodyData = Data(body.readableBytesView)
+                sampleRequest = try JSONDecoder().decode(SampleRequest.self, from: bodyData)
             case (.GET, .some(let decodedURI))
             where decodedURI.components.matches(prefix: [], oneOfPaths: [["health"]]) != nil:
                 // Health check endpoint

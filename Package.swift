@@ -61,7 +61,6 @@ let package = Package(
                 "ProfileRecorderPprofFormat",
                 "ProfileRecorderHelpers",
                 .product(name: "NIO", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOExtras", package: "swift-nio-extras"),
             ],
@@ -75,6 +74,7 @@ let package = Package(
                 "ProfileRecorderHelpers",
                 "ProfileRecorder",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                .product(name: "NIOFoundationCompat", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
             ]
         ),
@@ -114,7 +114,6 @@ let package = Package(
                 var profileRecorderServerTargetDeps: [Target.Dependency] = [
                     "ProfileRecorderHelpers",
                     .product(name: "NIO", package: "swift-nio"),
-                    .product(name: "NIOFoundationCompat", package: "swift-nio"),
                     .product(name: "NIOHTTP1", package: "swift-nio"),
                     .product(name: "_NIOFileSystem", package: "swift-nio"),
                     .product(name: "Logging", package: "swift-log"),

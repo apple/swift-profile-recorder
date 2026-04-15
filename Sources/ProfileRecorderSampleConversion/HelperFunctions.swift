@@ -15,7 +15,11 @@
 #if canImport(Glibc)
 @preconcurrency import Glibc // Sendability of stdout/stderr/..., needs to be at the top of the file
 #endif
+#if canImport(FoundationEssentials)
+import FoundationEssentials
+#else
 import Foundation
+#endif
 
 func swift_reportWarning(_ dunno: Int, _ message: String) {
     fputs("WARNING: \(message)\n", stderr)
