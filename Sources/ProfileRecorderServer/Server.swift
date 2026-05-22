@@ -23,6 +23,7 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+import NIOFoundationEssentialsCompat
 import NIOConcurrencyHelpers
 import Logging
 #if compiler(>=6.2)
@@ -656,9 +657,7 @@ public struct ProfileRecorderServer: Sendable {
                     oneOfPaths: [["sample"], ["samples"]]
                 ) != nil:
                 // Native Swift Profile Recorder Sampling server
-                let body = request.body ?? ByteBuffer()
-                let bodyData = Data(body.readableBytesView)
-                sampleRequest = try JSONDecoder().decode(SampleRequest.self, from: bodyData)
+                sampleRequest = try JSONDecoder().decode(SampleRequest.self, from: request.body ?? ByteBuffer())
             case (.GET, .some(let decodedURI))
             where decodedURI.components.matches(prefix: [], oneOfPaths: [["health"]]) != nil:
                 // Health check endpoint
