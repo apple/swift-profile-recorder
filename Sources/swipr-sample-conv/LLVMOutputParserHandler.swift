@@ -14,7 +14,10 @@
 
 #if canImport(Glibc)
 @preconcurrency import Glibc // Sendability of stdout/stderr/..., needs to be at the top of the file
+#elseif canImport(Musl)
+@preconcurrency import Musl
 #endif
+
 import NIO
 import _ProfileRecorderSampleConversion
 
