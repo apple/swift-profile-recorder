@@ -33,6 +33,7 @@ final class PerfScriptTests: XCTestCase {
                     microSecondsBetweenSamples: 0,
                     sampleCount: 0
                 ),
+                sampleSummary: SampleSummary(sampleCount: 0),
                 configuration: .default,
                 symbolizer: self.symbolizer
             )
@@ -76,6 +77,7 @@ final class PerfScriptTests: XCTestCase {
                     microSecondsBetweenSamples: 0,
                     sampleCount: 0
                 ),
+                sampleSummary: SampleSummary(sampleCount: 0),
                 configuration: .default,
                 symbolizer: self.symbolizer
             )

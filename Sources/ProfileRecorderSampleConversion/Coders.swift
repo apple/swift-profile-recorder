@@ -32,7 +32,7 @@ public struct SampleConfig: Codable & Hashable & Sendable {
         currentTimeSeconds: Int,
         currentTimeNanoseconds: Int,
         microSecondsBetweenSamples: Int,
-        sampleCount: Int
+        sampleCount: Int?
     ) {
         self.currentTimeSeconds = currentTimeSeconds
         self.currentTimeNanoseconds = currentTimeNanoseconds
@@ -42,6 +42,14 @@ public struct SampleConfig: Codable & Hashable & Sendable {
     public var currentTimeSeconds: Int
     public var currentTimeNanoseconds: Int
     public var microSecondsBetweenSamples: Int
+    public var sampleCount: Optional<Int>
+}
+
+public struct SampleSummary: Codable & Hashable & Sendable {
+    public init(sampleCount: Int) {
+        self.sampleCount = sampleCount
+    }
+
     public var sampleCount: Int
 }
 

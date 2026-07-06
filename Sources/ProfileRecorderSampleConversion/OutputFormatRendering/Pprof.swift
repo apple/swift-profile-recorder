@@ -36,6 +36,7 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
 
     public mutating func finalise(
         sampleConfiguration: SampleConfig,
+        sampleSummary: SampleSummary,
         configuration: ProfileRecorderSampleConversionConfiguration,
         symbolizer: CachedSymbolizer
     ) throws -> ByteBuffer {
@@ -109,7 +110,7 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                 (Int64(sampleConfiguration.currentTimeSeconds) * 1_000_000_000)
                 + Int64(sampleConfiguration.currentTimeNanoseconds)
             profile.durationNanos =
-                Int64(sampleConfiguration.sampleCount) * Int64(sampleConfiguration.microSecondsBetweenSamples) * 1_000
+                Int64(sampleSummary.sampleCount) * Int64(sampleConfiguration.microSecondsBetweenSamples) * 1_000
             profile.period = Int64(sampleConfiguration.microSecondsBetweenSamples) * 1_000
 
             /*

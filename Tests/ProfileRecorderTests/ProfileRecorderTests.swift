@@ -84,7 +84,7 @@ final class ProfileRecorderTests: XCTestCase {
         )
     }
 
-    func testSamplingWithThreadThatBlocksSIGPROF() async throws {
+    func testSamplingWithThreadThatBlocksSIGPROF() throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
@@ -122,10 +122,12 @@ final class ProfileRecorderTests: XCTestCase {
         threadUnblock.signal()
         threadDone.wait()
 
-        let sampleData = try await ByteBuffer(
-            contentsOf: FilePath("\(self.tempDirectory!)/samples.samples"),
-            maximumSizeAllowed: .mebibytes(32)
-        )
+        let sampleData = try self.group.any().makeFutureWithTask { [tempDirectory = self.tempDirectory!] in
+            try await ByteBuffer(
+                contentsOf: FilePath("\(tempDirectory)/samples.samples"),
+                maximumSizeAllowed: .mebibytes(32)
+            )
+        }.wait()
         XCTAssertGreaterThan(sampleData.readableBytes, 0, "Sample file should not be empty")
         let sampleString = String(buffer: sampleData)
         XCTAssertTrue(sampleString.contains("[SWIPR] SMPL"), "Sample file should contain sample data")
