@@ -214,7 +214,7 @@ final class ProfileRecorderTests: XCTestCase {
         try await done
     }
 
-    func testSymbolsAreMangled() async throws {
+    func testSymbolNames() async throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
@@ -245,9 +245,31 @@ final class ProfileRecorderTests: XCTestCase {
                 try await ByteBuffer(contentsOf: FilePath(file), maximumSizeAllowed: .mebibytes(16))
             }
             let samples = String(buffer: sampleBytes)
-            // We can only match the @inline(never) function FOO with mangling (the others might be inlined)
+            // We can only match the @inline(never) function FOO by its full name (the others might be inlined)
             XCTAssert(samples.contains("s20ProfileRecorderTests25RECGONISABLE_FUNCTION_FOO"), "foo missing: \(samples)")
             XCTAssert(samples.contains("RECGONISABLE_FUNCTION_QUUUX"), "quuux missing: \(samples)")
+
+            let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
+            try await NIOThreadPool.singleton.runIfActive { try symbolizer.start() }
+            let demangledBytes = try await ProfileRecorderSampler.sharedInstance._withSamples(
+                sampleCount: 1,
+                timeBetweenSamples: .nanoseconds(0),
+                format: .perfSymbolized,
+                symbolizer: symbolizer,
+                demangle: true,
+                logger: self.logger
+            ) { file in
+                try await ByteBuffer(contentsOf: FilePath(file), maximumSizeAllowed: .mebibytes(16))
+            }
+            try await NIOThreadPool.singleton.runIfActive { try symbolizer.shutdown() }
+            let demangled = String(buffer: demangledBytes)
+            var fooSymbol = "s20ProfileRecorderTests25RECGONISABLE_FUNCTION_FOO"
+            #if compiler(>=6.4)
+            if #available(macOS 27, *) {
+                fooSymbol = "ProfileRecorderTests.RECGONISABLE_FUNCTION_FOO("
+            }
+            #endif
+            XCTAssert(demangled.contains(fooSymbol), "demangled foo missing: \(demangled)")
         }
         try await done
     }

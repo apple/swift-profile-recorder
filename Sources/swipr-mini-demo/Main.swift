@@ -88,7 +88,7 @@ struct ProfileRecorderMiniDemo: ParsableCommand & Sendable {
             queue: DispatchQueue.global(),
             { result in
                 print("- collected samples: \(result)")
-                print("- ./swipr-sample-conv \(result) | swift demangle --compact > /tmp/samples.perf")
+                print("- ./swipr-sample-conv \(result) | swift demangle --compact > /tmp/samples.perf  # or --demangle true with Swift 6.4+ on macOS 27+ or Linux")
                 print("- open in a visualisation tool (such as https://speedscope.app or https://profiler.firefox.com)")
             }
         )

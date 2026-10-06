@@ -39,6 +39,8 @@ curl -s -d '{"numberOfSamples":100,"timeInterval":"100 ms"}' --unix-socket /var/
     curl --data-binary @- "http://YOUR_PYROSCOPE_SERVER:4040/ingest?name=YOUR_APP&sampleRate=10&from=$(( $(date +%s) - 10 ))"
 ```
 
+With Swift 6.4+ on macOS 27+ or Linux, add `"demangle":true` to the request body to get demangled symbols and drop the `swift demangle` step.
+
 ### Other options
 
 Check https://profilerpedia.markhansen.co.nz/formats/linux-perf-script/#converts-to-transitive for

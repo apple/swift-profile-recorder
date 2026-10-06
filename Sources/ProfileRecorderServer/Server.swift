@@ -551,7 +551,7 @@ public struct ProfileRecorderServer: Sendable {
                 curl \(exampleCURLArgs.joined(separator: " ")) > /tmp/samples.perf
                 ```
 
-                To also immediately demangle the symbols, run
+                To demangle the symbols, add `"demangle":true` to the body (needs Swift 6.4+ and macOS 27+ or Linux), or run
 
                 ```
                 curl \(exampleCURLArgs.joined(separator: " ")) | swift demangle --simplified > /tmp/samples.perf
@@ -641,6 +641,7 @@ public struct ProfileRecorderServer: Sendable {
                     } ?? (decodedURI.components.contains("symbolizer=fake") ? .fake : .native)
                 let sampleRate = (Int(decodedURI.queryParams["rate"].flatMap { $0 } ?? "not set") ?? 100)
                     .clamping(to: 0...1000) // 100 Hz, seems to be Golang's default
+                let demangle = decodedURI.queryParams["demangle"].flatMap { $0 }.flatMap(Bool.init) ?? false
                 let numberOfSamples = seconds * sampleRate
                 let timeIntervalBetweenSamplesMS = (1000 / sampleRate).clamping(to: 1...100_000)
 
@@ -648,7 +649,8 @@ public struct ProfileRecorderServer: Sendable {
                     numberOfSamples: numberOfSamples,
                     timeInterval: .milliseconds(Int64(timeIntervalBetweenSamplesMS)),
                     format: .pprofSymbolized,
-                    symbolizer: symbolizerKind
+                    symbolizer: symbolizerKind,
+                    demangle: demangle
                 )
             case (.POST, .some(let decodedURI))
             where decodedURI.components.isEmpty
@@ -705,6 +707,7 @@ public struct ProfileRecorderServer: Sendable {
                 timeBetweenSamples: sampleRequest.timeInterval,
                 format: sampleRequest.format,
                 symbolizer: sampleRequest.symbolizer == .native ? symbolizer : _ProfileRecorderFakeSymbolizer(),
+                demangle: sampleRequest.demangle,
                 logger: logger
             ) { samples in
                 try await FileSystem.shared.withFileHandle(forReadingAt: FilePath(samples)) { handle in
@@ -751,6 +754,7 @@ struct SampleRequest: Sendable & Codable {
     var timeInterval: TimeAmount
     var format: ProfileRecorderOutputFormat
     var symbolizer: ProfileRecorderSymbolizerKind
+    var demangle: Bool
 
     typealias SampleFormat = ProfileRecorderOutputFormat
 
@@ -759,18 +763,21 @@ struct SampleRequest: Sendable & Codable {
         case timeInterval
         case format
         case symbolizer
+        case demangle
     }
 
     internal init(
         numberOfSamples: Int,
         timeInterval: TimeAmount,
         format: SampleFormat,
-        symbolizer: ProfileRecorderSymbolizerKind
+        symbolizer: ProfileRecorderSymbolizerKind,
+        demangle: Bool = false
     ) {
         self.numberOfSamples = numberOfSamples
         self.timeInterval = timeInterval
         self.format = format
         self.symbolizer = symbolizer
+        self.demangle = demangle
     }
 
     init(from decoder: any Decoder) throws {
@@ -784,6 +791,7 @@ struct SampleRequest: Sendable & Codable {
         self.format = try container.decodeIfPresent(SampleFormat.self, forKey: .format) ?? .perfSymbolized
         self.symbolizer =
             try container.decodeIfPresent(ProfileRecorderSymbolizerKind.self, forKey: .symbolizer) ?? .native
+        self.demangle = try container.decodeIfPresent(Bool.self, forKey: .demangle) ?? false
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -798,6 +806,9 @@ struct SampleRequest: Sendable & Codable {
         }
         if self.symbolizer != .native {
             try container.encode(self.symbolizer, forKey: .symbolizer)
+        }
+        if self.demangle {
+            try container.encode(self.demangle, forKey: .demangle)
         }
     }
 }

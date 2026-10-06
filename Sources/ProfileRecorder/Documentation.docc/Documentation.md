@@ -29,6 +29,8 @@ That can be done using the command:
 swipr-sample-conv < /tmp/samples | swift demangle --simplified > /tmp/stacks.perf
 ```
 
+`swipr-sample-conv --demangle true` built with Swift 6.4+ and running on macOS 27+ or Linux demangles symbols itself, so the `swift demangle` step can be dropped.
+
 > Note: `swipr-sample-conv` _must_ be run on a system that has access to the very same files in the same versions as the system where the samples were obtained. 
 Usually this means that you need to run them in a Docker container with the exact same image as what you were running in production.
 It can be another container but it needs to have the same files at the same paths to be able to symbolicate the traces.

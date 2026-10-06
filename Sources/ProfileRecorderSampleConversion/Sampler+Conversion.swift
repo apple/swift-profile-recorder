@@ -31,6 +31,7 @@ extension ProfileRecorderSampler {
         timeBetweenSamples: TimeAmount,
         format: ProfileRecorderOutputFormat,
         symbolizer: any Symbolizer,
+        demangle: Bool = false,
         logger: Logger,
         _ body: (String) async throws -> R
     ) async throws -> R {
@@ -82,8 +83,10 @@ extension ProfileRecorderSampler {
                 case .raw:
                     fatalError("we shouldn't be here")
                 }
+                var config = SymbolizerConfiguration.default
+                config.demangle = demangle
                 let converter = ProfileRecorderSampleConverter(
-                    config: .default,
+                    config: config,
                     renderer: renderer,
                     symbolizer: symbolizer
                 )

@@ -48,6 +48,9 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
     @Option(help: "Should we attempt to print file:line information?")
     var enableFileLine: Bool = false
 
+    @Option(help: "Demangle Swift symbols (needs Swift 6.4+, macOS 27+ or Linux)?")
+    var demangle: Bool = false
+
     @Option(
         help: "Which output format",
         transform: { stringValue in
@@ -139,6 +142,7 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
                     outputPath: self.outputPath,
                     symbolizer: symboliser,
                     printFileLine: self.enableFileLine,
+                    demangle: self.demangle,
                     renderer: renderer,
                     logger: logger
                 )
@@ -158,6 +162,7 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
         outputPath: String,
         symbolizer: any Symbolizer,
         printFileLine: Bool,
+        demangle: Bool = false,
         renderer: any ProfileRecorderSampleConversionOutputRenderer,
         threadPool: NIOThreadPool = .singleton,
         group: any EventLoopGroup = .singletonMultiThreadedEventLoopGroup,
@@ -165,6 +170,7 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
     ) async throws {
         var config = SymbolizerConfiguration.default
         config.perfScriptOutputWithFileLineInformation = printFileLine
+        config.demangle = demangle
         let converter = ProfileRecorderSampleConverter(
             config: config,
             threadPool: threadPool,

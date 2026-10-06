@@ -21,6 +21,9 @@ import Foundation
 import NIOConcurrencyHelpers
 import NIOExtras
 import Logging
+#if compiler(>=6.4) && canImport(Runtime)
+import Runtime
+#endif
 
 public struct SymbolisedStackFrame: Sendable & Hashable {
     public struct SingleFrame: Sendable & Hashable {
@@ -259,6 +262,7 @@ public final class NativeELFSymboliser: Symbolizer & Sendable {
 
 public struct SymbolizerConfiguration: Sendable {
     public var perfScriptOutputWithFileLineInformation: Bool
+    public var demangle: Bool = false
 
     public static var `default`: SymbolizerConfiguration {
         return SymbolizerConfiguration(
@@ -416,7 +420,12 @@ public final class CachedSymbolizer: Sendable & CustomStringConvertible {
             if let symd = state.cache[stackFrame.instructionPointer] {
                 return symd
             } else {
-                let symd = try self.symboliseSlow(stackFrame)
+                var symd = try self.symboliseSlow(stackFrame)
+                if self.configuration.demangle {
+                    for index in symd.allFrames.indices {
+                        symd.allFrames[index].functionName = demangledSymbolName(symd.allFrames[index].functionName)
+                    }
+                }
                 state.cache[stackFrame.instructionPointer] = symd
                 return symd
             }
@@ -472,4 +481,13 @@ extension RandomAccessCollection {
 
         return nil
     }
+}
+
+func demangledSymbolName(_ name: String) -> String {
+    #if compiler(>=6.4) && canImport(Runtime)
+    if #available(macOS 27, *) {
+        return (try? Runtime.demangle(name)) ?? name
+    }
+    #endif
+    return name
 }

@@ -25,6 +25,8 @@ curl -sd '{"numberOfSamples":100,"timeInterval":"10 ms"}' http://localhost:7377 
     swift demangle --simplified > /tmp/samples.perf
 ```
 
+With Swift 6.4+ on macOS 27+ or Linux, add `"demangle":true` to the request body to get demangled symbols and drop the `swift demangle` step.
+
 The profile recording server can also provide access to traces over a UNIX domain socket. For more information, see <doc:ProfileRecorderServer/ProfileRecorderServer>.
 
 ## Topics
