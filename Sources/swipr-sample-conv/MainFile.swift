@@ -162,7 +162,7 @@ struct ProfileRecorderSampleConverterCommand: AsyncParsableCommand {
         outputPath: String,
         symbolizer: any Symbolizer,
         printFileLine: Bool,
-        demangle: Bool = false,
+        demangle: Bool,
         renderer: any ProfileRecorderSampleConversionOutputRenderer,
         threadPool: NIOThreadPool = .singleton,
         group: any EventLoopGroup = .singletonMultiThreadedEventLoopGroup,

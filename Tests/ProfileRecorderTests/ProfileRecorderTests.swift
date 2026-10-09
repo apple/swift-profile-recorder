@@ -214,7 +214,7 @@ final class ProfileRecorderTests: XCTestCase {
         try await done
     }
 
-    func testSymbolNames() async throws {
+    func testSymbolsAreMangled() async throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
         }
@@ -245,9 +245,35 @@ final class ProfileRecorderTests: XCTestCase {
                 try await ByteBuffer(contentsOf: FilePath(file), maximumSizeAllowed: .mebibytes(16))
             }
             let samples = String(buffer: sampleBytes)
-            // We can only match the @inline(never) function FOO by its full name (the others might be inlined)
+            // We can only match the @inline(never) function FOO with mangling (the others might be inlined)
             XCTAssert(samples.contains("s20ProfileRecorderTests25RECGONISABLE_FUNCTION_FOO"), "foo missing: \(samples)")
             XCTAssert(samples.contains("RECGONISABLE_FUNCTION_QUUUX"), "quuux missing: \(samples)")
+        }
+        try await done
+    }
+
+    func testDemanglingWorks() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let reachedQuuuxSem = DispatchSemaphore(value: 0)
+        let unblockSem = DispatchSemaphore(value: 0)
+        async let done: Void = NIOThreadPool.singleton.runIfActive {
+            RECGONISABLE_FUNCTION_FOO(reachedQuuuxSem: reachedQuuuxSem, unblockSem: unblockSem)
+        }
+        do {
+            defer {
+                unblockSem.signal()
+            }
+            self.logger.info("waiting for thread to be ready and stall in semaphore")
+            await withCheckedContinuation { cont in
+                DispatchQueue.global().async {
+                    reachedQuuuxSem.wait()
+                    cont.resume()
+                }
+            }
+            self.logger.info("thread is ready")
 
             let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
             try await NIOThreadPool.singleton.runIfActive { try symbolizer.start() }
@@ -270,6 +296,7 @@ final class ProfileRecorderTests: XCTestCase {
             }
             #endif
             XCTAssert(demangled.contains(fooSymbol), "demangled foo missing: \(demangled)")
+            XCTAssert(demangled.contains("RECGONISABLE_FUNCTION_QUUUX"), "demangled quuux missing: \(demangled)")
         }
         try await done
     }

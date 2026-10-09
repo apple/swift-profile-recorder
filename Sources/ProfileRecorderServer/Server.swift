@@ -499,7 +499,8 @@ public struct ProfileRecorderServer: Sendable {
             numberOfSamples: 100,
             timeInterval: TimeAmount.milliseconds(100),
             format: .perfSymbolized,
-            symbolizer: .native
+            symbolizer: .native,
+            demangle: false
         )
         let exampleEncoded = String(decoding: try! JSONEncoder().encode(example), as: UTF8.self)
         let exampleURL: String
@@ -771,7 +772,7 @@ struct SampleRequest: Sendable & Codable {
         timeInterval: TimeAmount,
         format: SampleFormat,
         symbolizer: ProfileRecorderSymbolizerKind,
-        demangle: Bool = false
+        demangle: Bool
     ) {
         self.numberOfSamples = numberOfSamples
         self.timeInterval = timeInterval
