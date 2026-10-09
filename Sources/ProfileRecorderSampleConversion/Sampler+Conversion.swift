@@ -31,7 +31,26 @@ extension ProfileRecorderSampler {
         timeBetweenSamples: TimeAmount,
         format: ProfileRecorderOutputFormat,
         symbolizer: any Symbolizer,
-        demangle: Bool = false,
+        logger: Logger,
+        _ body: (String) async throws -> R
+    ) async throws -> R {
+        try await self._withSamples(
+            sampleCount: sampleCount,
+            timeBetweenSamples: timeBetweenSamples,
+            format: format,
+            symbolizer: symbolizer,
+            demangle: false,
+            logger: logger,
+            body
+        )
+    }
+
+    public func _withSamples<R: Sendable>(
+        sampleCount: Int,
+        timeBetweenSamples: TimeAmount,
+        format: ProfileRecorderOutputFormat,
+        symbolizer: any Symbolizer,
+        demangle: Bool,
         logger: Logger,
         _ body: (String) async throws -> R
     ) async throws -> R {

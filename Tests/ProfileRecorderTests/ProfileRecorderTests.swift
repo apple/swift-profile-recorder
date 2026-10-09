@@ -291,7 +291,7 @@ final class ProfileRecorderTests: XCTestCase {
             let demangled = String(buffer: demangledBytes)
             var fooSymbol = "s20ProfileRecorderTests25RECGONISABLE_FUNCTION_FOO"
             #if compiler(>=6.4)
-            if #available(macOS 27, *) {
+            if #available(anyAppleOS 27, *) {
                 fooSymbol = "ProfileRecorderTests.RECGONISABLE_FUNCTION_FOO("
             }
             #endif

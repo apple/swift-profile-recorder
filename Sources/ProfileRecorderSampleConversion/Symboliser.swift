@@ -21,7 +21,7 @@ import Foundation
 import NIOConcurrencyHelpers
 import NIOExtras
 import Logging
-#if compiler(>=6.4) && canImport(Runtime)
+#if compiler(>=6.4) && canImport(Runtime) && !canImport(Musl)
 import Runtime
 #endif
 
@@ -484,8 +484,8 @@ extension RandomAccessCollection {
 }
 
 func demangledSymbolName(_ name: String) -> String {
-    #if compiler(>=6.4) && canImport(Runtime)
-    if #available(macOS 27, *) {
+    #if compiler(>=6.4) && canImport(Runtime) && !canImport(Musl)
+    if #available(anyAppleOS 27, *) {
         return (try? Runtime.demangle(name)) ?? name
     }
     #endif
