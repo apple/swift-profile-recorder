@@ -22,13 +22,13 @@ let package = Package(
     ],
     dependencies: [
         .package(path: "../"),
-        .package(url: "https://github.com/ordo-one/package-benchmark.git", from: "1.29.0"),
+        .package(url: "https://github.com/ordo-one/benchmark.git", from: "1.29.0"),
     ],
     targets: [
         .target(
             name: "SampleWorkload",
             dependencies: [
-                .product(name: "Benchmark", package: "package-benchmark")
+                .product(name: "Benchmark", package: "benchmark")
             ],
             path: "Benchmarks/SampleWorkload",
         ),
@@ -36,13 +36,13 @@ let package = Package(
             name: "ConversionBenchmarks",
             dependencies: [
                 "SampleWorkload",
-                .product(name: "Benchmark", package: "package-benchmark"),
+                .product(name: "Benchmark", package: "benchmark"),
                 .product(name: "ProfileRecorder", package: "swift-profile-recorder"),
                 .product(name: "_ProfileRecorderSampleConversion", package: "swift-profile-recorder"),
             ],
             path: "Benchmarks/ConversionBenchmarks",
             plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
+                .plugin(name: "BenchmarkPlugin", package: "benchmark")
             ]
         ),
     ]
