@@ -34,6 +34,26 @@ extension ProfileRecorderSampler {
         logger: Logger,
         _ body: (String) async throws -> R
     ) async throws -> R {
+        try await self._withSamples(
+            sampleCount: sampleCount,
+            timeBetweenSamples: timeBetweenSamples,
+            format: format,
+            symbolizer: symbolizer,
+            demangle: false,
+            logger: logger,
+            body
+        )
+    }
+
+    public func _withSamples<R: Sendable>(
+        sampleCount: Int,
+        timeBetweenSamples: TimeAmount,
+        format: ProfileRecorderOutputFormat,
+        symbolizer: any Symbolizer,
+        demangle: Bool,
+        logger: Logger,
+        _ body: (String) async throws -> R
+    ) async throws -> R {
         try await FileSystem.shared.withTemporaryDirectory {
             tmpDirHandle,
             tmpDirPath in
@@ -82,8 +102,10 @@ extension ProfileRecorderSampler {
                 case .raw:
                     fatalError("we shouldn't be here")
                 }
+                var config = SymbolizerConfiguration.default
+                config.demangle = demangle
                 let converter = ProfileRecorderSampleConverter(
-                    config: .default,
+                    config: config,
                     renderer: renderer,
                     symbolizer: symbolizer
                 )

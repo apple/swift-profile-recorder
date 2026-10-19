@@ -48,6 +48,8 @@ curl -sd '{"numberOfSamples":100,"timeInterval":"10 ms"}' --unix-socket /var/run
     swift demangle --simplified > /tmp/samples.perf
 ```
 
+With Swift 6.4+ on macOS 27+ or Linux, add `"demangle":true` to the request body to get demangled symbols and drop the `swift demangle` step.
+
 Drag the resulting file into [Firefox Profiler](https://profiler.firefox.com), a client-side web app, to see a visualization of the traces. 
 
 ## Topics

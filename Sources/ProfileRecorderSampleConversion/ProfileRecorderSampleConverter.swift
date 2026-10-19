@@ -280,7 +280,7 @@ public struct ProfileRecorderSampleConverter: Sendable {
                     vmapsRead = true
                     if symboliser == nil {
                         symboliser = CachedSymbolizer(
-                            configuration: .default,
+                            configuration: self.symbolizerConfiguration,
                             symbolizer: underlyingSymbolizer,
                             dynamicLibraryMappings: vmaps,
                             group: group,

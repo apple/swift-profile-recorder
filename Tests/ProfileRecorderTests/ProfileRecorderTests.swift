@@ -252,6 +252,55 @@ final class ProfileRecorderTests: XCTestCase {
         try await done
     }
 
+    func testDemanglingWorks() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let reachedQuuuxSem = DispatchSemaphore(value: 0)
+        let unblockSem = DispatchSemaphore(value: 0)
+        async let done: Void = NIOThreadPool.singleton.runIfActive {
+            RECGONISABLE_FUNCTION_FOO(reachedQuuuxSem: reachedQuuuxSem, unblockSem: unblockSem)
+        }
+        do {
+            defer {
+                unblockSem.signal()
+            }
+            self.logger.info("waiting for thread to be ready and stall in semaphore")
+            await withCheckedContinuation { cont in
+                DispatchQueue.global().async {
+                    reachedQuuuxSem.wait()
+                    cont.resume()
+                }
+            }
+            self.logger.info("thread is ready")
+
+            let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
+            try await NIOThreadPool.singleton.runIfActive { try symbolizer.start() }
+            let demangledBytes = try await ProfileRecorderSampler.sharedInstance._withSamples(
+                sampleCount: 1,
+                timeBetweenSamples: .nanoseconds(0),
+                format: .perfSymbolized,
+                symbolizer: symbolizer,
+                demangle: true,
+                logger: self.logger
+            ) { file in
+                try await ByteBuffer(contentsOf: FilePath(file), maximumSizeAllowed: .mebibytes(16))
+            }
+            try await NIOThreadPool.singleton.runIfActive { try symbolizer.shutdown() }
+            let demangled = String(buffer: demangledBytes)
+            var fooSymbol = "s20ProfileRecorderTests25RECGONISABLE_FUNCTION_FOO"
+            #if compiler(>=6.4)
+            if #available(anyAppleOS 27, *) {
+                fooSymbol = "ProfileRecorderTests.RECGONISABLE_FUNCTION_FOO("
+            }
+            #endif
+            XCTAssert(demangled.contains(fooSymbol), "demangled foo missing: \(demangled)")
+            XCTAssert(demangled.contains("RECGONISABLE_FUNCTION_QUUUX"), "demangled quuux missing: \(demangled)")
+        }
+        try await done
+    }
+
     // MARK: - Setup/teardown
     override func setUp() {
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)

@@ -66,6 +66,8 @@ After that, you're ready to request samples:
 curl --unix-socket /tmp/my-app-samples-62012.sock -sd '{"numberOfSamples":10,"timeInterval":"100 ms"}' http://localhost/sample | swift demangle --compact > /tmp/samples.perf
 ```
 
+With Swift 6.4+ on macOS 27+ or Linux, add `"demangle":true` to the request body to get demangled symbols and drop the `swift demangle` step.
+
 Now, a file called `/tmp/samples.perf` should have been created. This file is in the standard Linux perf format.
 
 #### Visualisation
