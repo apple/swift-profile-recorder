@@ -40,6 +40,19 @@ struct ProfileRecorderSamplerError: Error {
     var code: CInt
 }
 
+struct ShouldSampleMoreCountBasedContext {
+    let desiredNumberOfSamples: Int
+}
+
+func shouldSampleMoreCountBased(
+    _ context: UnsafeMutableRawPointer?,
+    _ perSampleInfo: OpaquePointer
+) -> CBool {
+    let typedContext = context!.assumingMemoryBound(to: ShouldSampleMoreCountBasedContext.self)
+    let samplesTaken = swipr_per_sample_information_get_samples_taken(perSampleInfo)
+    return samplesTaken < typedContext.pointee.desiredNumberOfSamples
+}
+
 public final class ProfileRecorderSampler: Sendable {
     private let threadPool: NIOThreadPool
 
@@ -74,7 +87,14 @@ public final class ProfileRecorderSampler: Sendable {
     ) -> EventLoopFuture<Void> {
         #if canImport(CProfileRecorderSampler) // only on macOS & Linux
         return self.threadPool.runIfActive(eventLoop: eventLoop) {
-            let ret = swipr_request_sample(output.handle, .init(count), .init(timeBetweenSamples.nanoseconds / 1000))
+            var context = ShouldSampleMoreCountBasedContext(desiredNumberOfSamples: count)
+            let ret = swipr_request_sample(
+                output.handle,
+                shouldSampleMoreCountBased,
+                &context,
+                .init(count),
+                .init(timeBetweenSamples.nanoseconds / 1000)
+            )
             fflush(output.handle)
             guard ret == 0 else {
                 throw ProfileRecorderSamplerError(code: ret)

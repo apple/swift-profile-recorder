@@ -32,9 +32,51 @@ public protocol ProfileRecorderSampleConversionOutputRenderer: Sendable {
         symbolizer: CachedSymbolizer
     ) throws -> ByteBuffer
 
+    @available(*, deprecated, renamed: "finalise(sampleConfiguration:sampleSummary:configuration:symbolizer:)")
     mutating func finalise(
         sampleConfiguration: SampleConfig,
         configuration: ProfileRecorderSampleConversionConfiguration,
         symbolizer: CachedSymbolizer
     ) throws -> ByteBuffer
+
+    mutating func finalise(
+        sampleConfiguration: SampleConfig,
+        sampleSummary: SampleSummary,
+        configuration: ProfileRecorderSampleConversionConfiguration,
+        symbolizer: CachedSymbolizer
+    ) throws -> ByteBuffer
+}
+
+extension ProfileRecorderSampleConversionOutputRenderer {
+    @available(*, deprecated, renamed: "finalise(sampleConfiguration:sampleSummary:configuration:symbolizer:)")
+    public mutating func finalise(
+        sampleConfiguration: SampleConfig,
+        configuration: ProfileRecorderSampleConversionConfiguration,
+        symbolizer: CachedSymbolizer
+    ) throws -> ByteBuffer {
+        return try self.finalise(
+            sampleConfiguration: sampleConfiguration,
+            sampleSummary: SampleSummary(sampleCount: sampleConfiguration.sampleCount ?? 0),
+            configuration: configuration,
+            symbolizer: symbolizer
+        )
+    }
+
+    @available(
+        *,
+         deprecated,
+         message: "You must implement finalise(sampleConfiguration:sampleSummary:configuration:symbolizer:)"
+    )
+    public mutating func finalise(
+        sampleConfiguration: SampleConfig,
+        sampleSummary: SampleSummary,
+        configuration: ProfileRecorderSampleConversionConfiguration,
+        symbolizer: CachedSymbolizer
+    ) throws -> ByteBuffer {
+        return try self.finalise(
+            sampleConfiguration: sampleConfiguration,
+            configuration: configuration,
+            symbolizer: symbolizer
+        )
+    }
 }

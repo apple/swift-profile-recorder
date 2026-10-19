@@ -192,15 +192,22 @@ swipr_make_sample(struct swipr_minidump *minidumps,
     return err;
 }
 
+struct swipr_per_sample_information {
+    size_t samples_taken;
+};
+
 int
 swipr_request_sample(FILE *output,
-                     size_t sample_count,
+                     bool (*should_take_more_samples)(void *, struct swipr_per_sample_information *),
+                     void *context,
+                     size_t sample_count_hint,
                      useconds_t usecs_between_samples) {
     size_t num_minidumps = 0;
     char old_thread_name[128] = {0};
     swipr_os_dep_get_current_thread_name(old_thread_name, sizeof(old_thread_name));
-    struct timespec current_time = swipr_sampler_get_current_time();
+    const struct timespec current_time = swipr_sampler_get_current_time();
     struct swipr_minidump *minidumps = NULL;
+    struct swipr_per_sample_information per_sample_info = {0};
 
 #if !defined(__linux__) && !defined(__APPLE__)
     fprintf(output,
@@ -225,25 +232,43 @@ swipr_request_sample(FILE *output,
         return err;
     }
 
-    fprintf(output,
-            "[SWIPR] CONF { "
-            "\"sampleCount\": %llu, "
-            "\"microSecondsBetweenSamples\": %llu, "
-            "\"currentTimeSeconds\": %llu, "
-            "\"currentTimeNanoseconds\": %llu, "
-            "}\n",
-            (unsigned long long)sample_count,
-            (unsigned long long)usecs_between_samples,
-            (unsigned long long)current_time.tv_sec,
-            (unsigned long long)current_time.tv_nsec);
+    if (sample_count_hint > 0) {
+        fprintf(output,
+                "[SWIPR] CONF { "
+                "\"sampleCount\": %llu, "
+                "\"microSecondsBetweenSamples\": %llu, "
+                "\"currentTimeSeconds\": %llu, "
+                "\"currentTimeNanoseconds\": %llu, "
+                "}\n",
+                (unsigned long long)sample_count_hint,
+                (unsigned long long)usecs_between_samples,
+                (unsigned long long)current_time.tv_sec,
+                (unsigned long long)current_time.tv_nsec
+                );
+    } else {
+        fprintf(output,
+                "[SWIPR] CONF { "
+                "\"microSecondsBetweenSamples\": %llu, "
+                "\"currentTimeSeconds\": %llu, "
+                "\"currentTimeNanoseconds\": %llu, "
+                "}\n",
+                (unsigned long long)usecs_between_samples,
+                (unsigned long long)current_time.tv_sec,
+                (unsigned long long)current_time.tv_nsec
+                );
+    }
 
     swipr_os_dep_set_current_thread_name("swipr-sampling");
-    for (size_t sample_no=0; sample_no<sample_count; sample_no++) {
+    for (
+         per_sample_info.samples_taken=0;
+         should_take_more_samples(context, &per_sample_info);
+         per_sample_info.samples_taken++
+    ) {
         err = swipr_make_sample(minidumps, SWIPR_MAX_MUTATOR_THREADS, &num_minidumps);
         if (err) {
             fprintf(output,
                     "[SWIPR] MESG { \"message\": \"Sample %lu failed, error: %d.\" }\n",
-                    sample_no, err);
+                    per_sample_info.samples_taken, err);
             continue;
         }
 
@@ -282,9 +307,20 @@ swipr_request_sample(FILE *output,
     }
     swipr_os_dep_set_current_thread_name(old_thread_name);
 
+    fprintf(output,
+            "[SWIPR] SMRY { "
+            "\"sampleCount\": %llu, "
+            "}\n",
+            (unsigned long long)per_sample_info.samples_taken
+            );
+
     free(minidumps);
     minidumps = NULL;
     return 0;
+}
+
+size_t swipr_per_sample_information_get_samples_taken(struct swipr_per_sample_information *per_sample_info) {
+    return per_sample_info->samples_taken;
 }
 
 static void
