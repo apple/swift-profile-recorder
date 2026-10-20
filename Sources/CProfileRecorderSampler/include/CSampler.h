@@ -18,9 +18,17 @@
 #include <unistd.h>
 #include <stdio.h>
 
+enum swipr_sampling_mode {
+    /// All threads, running or waiting.
+    SWIPR_SAMPLING_WALL,
+    /// Only threads running or runnable when sampled.
+    SWIPR_SAMPLING_CPU,
+};
+
 int swipr_request_sample(FILE *output,
                          size_t sample_count,
-                         useconds_t usecs_between_samples);
+                         useconds_t usecs_between_samples,
+                         enum swipr_sampling_mode mode);
 int swipr_initialize(void);
 
 #endif /* CSampler_h */

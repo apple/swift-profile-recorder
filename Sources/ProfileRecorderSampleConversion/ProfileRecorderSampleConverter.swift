@@ -185,7 +185,18 @@ public struct ProfileRecorderSampleConverter: Sendable {
             }
 
             var symboliser: CachedSymbolizer? = nil
+            var sampleConfigRead = false
             defer {
+                // A capture with no samples (an idle process in `cpu` mode) still renders a valid, empty profile.
+                if sampleConfigRead && symboliser == nil {
+                    symboliser = CachedSymbolizer(
+                        configuration: .default,
+                        symbolizer: underlyingSymbolizer,
+                        dynamicLibraryMappings: vmaps,
+                        group: group,
+                        logger: logger
+                    )
+                }
                 if let symboliser = symboliser {
                     do {
                         let renderedSample = try self.renderer.finalise(
@@ -240,6 +251,7 @@ public struct ProfileRecorderSampleConverter: Sendable {
                         continue
                     }
                     sampleConfig = conf
+                    sampleConfigRead = true
                 case "VERS":
                     guard
                         let version = try? decoder.decode(

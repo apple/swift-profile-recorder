@@ -90,8 +90,8 @@ Below, some compatible visualisation tools:
 
 ### Profile recording server URL endpoints
 
-- pprof's [`/debug/pprof/profile` endpoint](https://pkg.go.dev/net/http/pprof)
-- Swift Profile Recorder's own `/sample` endpoint
+- pprof's [`/debug/pprof/profile` endpoint](https://pkg.go.dev/net/http/pprof); add `mode=cpu` to record only running or runnable threads, default `mode=wall` records all threads
+- Swift Profile Recorder's own `/sample` endpoint; add `"mode": "cpu"` to the JSON body to record only running or runnable threads
 - `/health` endpoint for health checks (returns `200 OK`)
 
 ## Example profiles

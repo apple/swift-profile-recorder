@@ -17,6 +17,7 @@ import FoundationEssentials
 #else
 import Foundation
 #endif
+import ProfileRecorder
 
 public struct Version: Decodable {
     public var version: Int
@@ -32,17 +33,21 @@ public struct SampleConfig: Codable & Hashable & Sendable {
         currentTimeSeconds: Int,
         currentTimeNanoseconds: Int,
         microSecondsBetweenSamples: Int,
-        sampleCount: Int
+        sampleCount: Int,
+        mode: ProfileRecorderSamplingMode? = nil
     ) {
         self.currentTimeSeconds = currentTimeSeconds
         self.currentTimeNanoseconds = currentTimeNanoseconds
         self.microSecondsBetweenSamples = microSecondsBetweenSamples
         self.sampleCount = sampleCount
+        self.mode = mode
     }
     public var currentTimeSeconds: Int
     public var currentTimeNanoseconds: Int
     public var microSecondsBetweenSamples: Int
     public var sampleCount: Int
+    /// `nil` for raw files written before the mode was recorded, which were all `.wall`.
+    public var mode: ProfileRecorderSamplingMode?
 }
 
 public struct DynamicLibMapping: Decodable & Sendable & CustomStringConvertible & Hashable & Comparable {

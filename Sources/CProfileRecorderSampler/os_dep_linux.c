@@ -31,9 +31,10 @@
 #include "interface.h"
 #include "common.h"
 
-// Reads the name and whether SIGPROF is blocked from /proc/self/task/<tid>/stat, one file instead of status and comm.
+// Reads the name, the state ('R' = running or runnable) and whether SIGPROF is blocked from /proc/self/task/<tid>/stat,
+// one file instead of status and comm.
 // Returns: 0 on success, -1 on error.
-static int swipr_read_thread_stat(swipr_os_dep_thread_id tid, char *name, size_t name_size, bool *sigprof_blocked) {
+static int swipr_read_thread_stat(swipr_os_dep_thread_id tid, char *name, size_t name_size, char *state, bool *sigprof_blocked) {
     char path[64];
     snprintf(path, sizeof(path), "/proc/self/task/%d/stat", tid);
 
@@ -72,6 +73,8 @@ static int swipr_read_thread_stat(swipr_os_dep_thread_id tid, char *name, size_t
         field++;
     }
     unsigned long long mask = strtoull(field, NULL, 10);
+    // Field 3 is the state; read once the walk above shows the fields after the name exist.
+    *state = name_end[2];
 
     memcpy(name, name_start, name_length);
     name[name_length] = '\0';
@@ -79,7 +82,7 @@ static int swipr_read_thread_stat(swipr_os_dep_thread_id tid, char *name, size_t
     return 0;
 }
 
-struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
+struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, enum swipr_sampling_mode mode) {
     struct thread_info *all_threads = calloc(sizeof(struct thread_info), SWIPR_MAX_MUTATOR_THREADS);
     if (!all_threads) {
         return NULL;
@@ -113,10 +116,14 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
         if (tid != 0 && tid != my_tid) {
             struct thread_info *thread = &all_threads[next_index];
             bool sigprof_blocked = false;
-            if (swipr_read_thread_stat(tid, thread->ti_name, sizeof(thread->ti_name), &sigprof_blocked) != 0) {
+            char state = 0;
+            if (swipr_read_thread_stat(tid, thread->ti_name, sizeof(thread->ti_name), &state, &sigprof_blocked) != 0) {
                 thread->ti_name[0] = '\0';
             } else if (sigprof_blocked) {
                 // Skip threads that have SIGPROF blocked
+                continue;
+            }
+            if (mode == SWIPR_SAMPLING_CPU && state != 'R') {
                 continue;
             }
             next_index++;

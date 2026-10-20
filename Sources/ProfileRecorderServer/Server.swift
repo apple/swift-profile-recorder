@@ -645,13 +645,17 @@ public struct ProfileRecorderServer: Sendable {
                 let demangle = decodedURI.queryParams["demangle"].flatMap { $0 }.flatMap(Bool.init) ?? false
                 let numberOfSamples = seconds * sampleRate
                 let timeIntervalBetweenSamplesMS = (1000 / sampleRate).clamping(to: 1...100_000)
+                let mode =
+                    decodedURI.queryParams["mode"].flatMap { $0 }.flatMap(ProfileRecorderSamplingMode.init(rawValue:))
+                    ?? .wall
 
                 sampleRequest = SampleRequest(
                     numberOfSamples: numberOfSamples,
                     timeInterval: .milliseconds(Int64(timeIntervalBetweenSamplesMS)),
                     format: .pprofSymbolized,
                     symbolizer: symbolizerKind,
-                    demangle: demangle
+                    demangle: demangle,
+                    mode: mode
                 )
             case (.POST, .some(let decodedURI))
             where decodedURI.components.isEmpty
@@ -706,6 +710,7 @@ public struct ProfileRecorderServer: Sendable {
             try await ProfileRecorderSampler.sharedInstance._withSamples(
                 sampleCount: sampleRequest.numberOfSamples,
                 timeBetweenSamples: sampleRequest.timeInterval,
+                mode: sampleRequest.mode,
                 format: sampleRequest.format,
                 symbolizer: sampleRequest.symbolizer == .native ? symbolizer : _ProfileRecorderFakeSymbolizer(),
                 demangle: sampleRequest.demangle,
@@ -756,6 +761,7 @@ struct SampleRequest: Sendable & Codable {
     var format: ProfileRecorderOutputFormat
     var symbolizer: ProfileRecorderSymbolizerKind
     var demangle: Bool
+    var mode: ProfileRecorderSamplingMode
 
     typealias SampleFormat = ProfileRecorderOutputFormat
 
@@ -765,6 +771,7 @@ struct SampleRequest: Sendable & Codable {
         case format
         case symbolizer
         case demangle
+        case mode
     }
 
     internal init(
@@ -772,13 +779,15 @@ struct SampleRequest: Sendable & Codable {
         timeInterval: TimeAmount,
         format: SampleFormat,
         symbolizer: ProfileRecorderSymbolizerKind,
-        demangle: Bool
+        demangle: Bool,
+        mode: ProfileRecorderSamplingMode = .wall
     ) {
         self.numberOfSamples = numberOfSamples
         self.timeInterval = timeInterval
         self.format = format
         self.symbolizer = symbolizer
         self.demangle = demangle
+        self.mode = mode
     }
 
     init(from decoder: any Decoder) throws {
@@ -793,6 +802,7 @@ struct SampleRequest: Sendable & Codable {
         self.symbolizer =
             try container.decodeIfPresent(ProfileRecorderSymbolizerKind.self, forKey: .symbolizer) ?? .native
         self.demangle = try container.decodeIfPresent(Bool.self, forKey: .demangle) ?? false
+        self.mode = try container.decodeIfPresent(ProfileRecorderSamplingMode.self, forKey: .mode) ?? .wall
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -810,6 +820,9 @@ struct SampleRequest: Sendable & Codable {
         }
         if self.demangle {
             try container.encode(self.demangle, forKey: .demangle)
+        }
+        if self.mode != .wall {
+            try container.encode(self.mode, forKey: .mode)
         }
     }
 }

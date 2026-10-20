@@ -15,6 +15,7 @@
 import Logging
 import XCTest
 import NIO
+import ProfileRecorder
 import ProfileRecorderPprofFormat
 
 @testable import _ProfileRecorderSampleConversion
@@ -98,6 +99,27 @@ final class PprofTests: XCTestCase {
             2,
             "Both valid instruction pointers should produce locations with addresses"
         )
+    }
+
+    func testPprofPeriodTypeFollowsSamplingMode() throws {
+        let cases: [(ProfileRecorderSamplingMode?, String)] = [(nil, "wall"), (.wall, "wall"), (.cpu, "cpu")]
+        for (mode, expected) in cases {
+            var renderer = PprofOutputRenderer()
+            let output = try renderer.finalise(
+                sampleConfiguration: SampleConfig(
+                    currentTimeSeconds: 0,
+                    currentTimeNanoseconds: 0,
+                    microSecondsBetweenSamples: 0,
+                    sampleCount: 0,
+                    mode: mode
+                ),
+                configuration: .default,
+                symbolizer: self.symbolizer
+            )
+            let profile = try Perftools_Profiles_Profile(output)
+            XCTAssertEqual(profile.stringTable[Int(profile.periodType.type)], expected)
+            XCTAssertEqual(profile.stringTable[Int(profile.periodType.unit)], "nanoseconds")
+        }
     }
 
     func testPprofSameStackDifferentThreads_NotAggregated() throws {

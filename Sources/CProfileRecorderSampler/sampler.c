@@ -165,12 +165,13 @@ swipr_sampler_unwind_thread(int i, struct swipr_minidump *minidump, const char *
 static int
 swipr_make_sample(struct swipr_minidump *minidumps,
                  size_t minidumps_capacity,
-                 size_t *minidumps_count_ptr) {
+                 size_t *minidumps_count_ptr,
+                 enum swipr_sampling_mode mode) {
     swipr_state_start_preparing();
 
     size_t num_threads = 0;
     int err;
-    struct thread_info *all_threads = swipr_os_dep_create_thread_list(&num_threads);
+    struct thread_info *all_threads = swipr_os_dep_create_thread_list(&num_threads, mode);
     if (all_threads == NULL) {
         swipr_state_abort_preparing();
         return 1;
@@ -261,7 +262,8 @@ swipr_write_stack(FILE *output, const struct swipr_minidump *minidump, char *__c
 int
 swipr_request_sample(FILE *output,
                      size_t sample_count,
-                     useconds_t usecs_between_samples) {
+                     useconds_t usecs_between_samples,
+                     enum swipr_sampling_mode mode) {
     size_t num_minidumps = 0;
     char old_thread_name[128] = {0};
     swipr_os_dep_get_current_thread_name(old_thread_name, sizeof(old_thread_name));
@@ -302,15 +304,17 @@ swipr_request_sample(FILE *output,
             "\"microSecondsBetweenSamples\": %llu, "
             "\"currentTimeSeconds\": %llu, "
             "\"currentTimeNanoseconds\": %llu, "
+            "\"mode\": \"%s\", "
             "}\n",
             (unsigned long long)sample_count,
             (unsigned long long)usecs_between_samples,
             (unsigned long long)current_time.tv_sec,
-            (unsigned long long)current_time.tv_nsec);
+            (unsigned long long)current_time.tv_nsec,
+            mode == SWIPR_SAMPLING_CPU ? "cpu" : "wall");
 
     swipr_os_dep_set_current_thread_name("swipr-sampling");
     for (size_t sample_no=0; sample_no<sample_count; sample_no++) {
-        err = swipr_make_sample(minidumps, SWIPR_MAX_MUTATOR_THREADS, &num_minidumps);
+        err = swipr_make_sample(minidumps, SWIPR_MAX_MUTATOR_THREADS, &num_minidumps, mode);
         if (err) {
             fprintf(output,
                     "[SWIPR] MESG { \"message\": \"Sample %lu failed, error: %d.\" }\n",
