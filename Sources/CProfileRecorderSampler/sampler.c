@@ -125,12 +125,13 @@ swipr_initialise_c2ms(FILE *output) {
 static int
 swipr_make_sample(struct swipr_minidump *minidumps,
                  size_t minidumps_capacity,
-                 size_t *minidumps_count_ptr) {
+                 size_t *minidumps_count_ptr,
+                 enum swipr_sampling_mode mode) {
     swipr_state_start_preparing();
 
     size_t num_threads = 0;
     int err;
-    struct thread_info *all_threads = swipr_os_dep_create_thread_list(&num_threads);
+    struct thread_info *all_threads = swipr_os_dep_create_thread_list(&num_threads, mode);
     if (all_threads == NULL) {
         swipr_state_abort_preparing();
         return 1;
@@ -192,10 +193,31 @@ swipr_make_sample(struct swipr_minidump *minidumps,
     return err;
 }
 
+// Longest escape of one byte: "\u00XX".
+#define SWIPR_JSON_ESCAPE_MAX 6
+
+// Thread names are arbitrary bytes; the raw format is one JSON object per line.
+static void
+swipr_json_escape(char *out, size_t out_len, const char *in) {
+    size_t o = 0;
+    for (const unsigned char *c = (const unsigned char *)in; *c && o + SWIPR_JSON_ESCAPE_MAX < out_len; c++) {
+        if (*c == '"' || *c == '\\') {
+            out[o++] = '\\';
+            out[o++] = *c;
+        } else if (*c < 0x20) {
+            o += snprintf(out + o, out_len - o, "\\u%04x", *c);
+        } else {
+            out[o++] = *c;
+        }
+    }
+    out[o] = 0;
+}
+
 int
 swipr_request_sample(FILE *output,
                      size_t sample_count,
-                     useconds_t usecs_between_samples) {
+                     useconds_t usecs_between_samples,
+                     enum swipr_sampling_mode mode) {
     size_t num_minidumps = 0;
     char old_thread_name[128] = {0};
     swipr_os_dep_get_current_thread_name(old_thread_name, sizeof(old_thread_name));
@@ -231,15 +253,17 @@ swipr_request_sample(FILE *output,
             "\"microSecondsBetweenSamples\": %llu, "
             "\"currentTimeSeconds\": %llu, "
             "\"currentTimeNanoseconds\": %llu, "
+            "\"mode\": \"%s\", "
             "}\n",
             (unsigned long long)sample_count,
             (unsigned long long)usecs_between_samples,
             (unsigned long long)current_time.tv_sec,
-            (unsigned long long)current_time.tv_nsec);
+            (unsigned long long)current_time.tv_nsec,
+            mode == SWIPR_SAMPLING_CPU ? "cpu" : "wall");
 
     swipr_os_dep_set_current_thread_name("swipr-sampling");
     for (size_t sample_no=0; sample_no<sample_count; sample_no++) {
-        err = swipr_make_sample(minidumps, SWIPR_MAX_MUTATOR_THREADS, &num_minidumps);
+        err = swipr_make_sample(minidumps, SWIPR_MAX_MUTATOR_THREADS, &num_minidumps, mode);
         if (err) {
             fprintf(output,
                     "[SWIPR] MESG { \"message\": \"Sample %lu failed, error: %d.\" }\n",
@@ -249,6 +273,11 @@ swipr_request_sample(FILE *output,
 
         for (size_t t=0; t<num_minidumps; t++) {
             struct swipr_minidump *minidump = &minidumps[t];
+            if (minidump->md_tid == 0) {
+                continue; // thread died or could not be suspended
+            }
+            char escaped_name[SWIPR_JSON_ESCAPE_MAX * sizeof(minidump->md_thread_name)];
+            swipr_json_escape(escaped_name, sizeof(escaped_name), minidump->md_thread_name);
             fprintf(output,
                     "[SWIPR] SMPL {"
                     "\"pid\": %d, "
@@ -259,7 +288,7 @@ swipr_request_sample(FILE *output,
                     "}\n",
                     minidump->md_pid,
                     (uintptr_t)minidump->md_tid,
-                    minidump->md_thread_name,
+                    escaped_name,
                     minidump->md_time.tv_sec,
                     minidump->md_time.tv_nsec
                     );

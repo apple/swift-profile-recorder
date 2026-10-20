@@ -29,6 +29,7 @@ extension ProfileRecorderSampler {
     public func _withSamples<R: Sendable>(
         sampleCount: Int,
         timeBetweenSamples: TimeAmount,
+        mode: ProfileRecorderSamplingMode = .wall,
         format: ProfileRecorderOutputFormat,
         symbolizer: any Symbolizer,
         logger: Logger,
@@ -37,6 +38,7 @@ extension ProfileRecorderSampler {
         try await self._withSamples(
             sampleCount: sampleCount,
             timeBetweenSamples: timeBetweenSamples,
+            mode: mode,
             format: format,
             symbolizer: symbolizer,
             demangle: false,
@@ -48,6 +50,7 @@ extension ProfileRecorderSampler {
     public func _withSamples<R: Sendable>(
         sampleCount: Int,
         timeBetweenSamples: TimeAmount,
+        mode: ProfileRecorderSamplingMode = .wall,
         format: ProfileRecorderOutputFormat,
         symbolizer: any Symbolizer,
         demangle: Bool,
@@ -65,6 +68,7 @@ extension ProfileRecorderSampler {
             logger[metadataKey: "time-between-samples"] = "\(timeBetweenSamples.prettyPrint)"
             logger[metadataKey: "raw-samples-path"] = "\(rawSamplesPath)"
             logger[metadataKey: "symbolizer"] = "\(symbolizer)"
+            logger[metadataKey: "mode"] = "\(mode.rawValue)"
             switch format {
             case .perfSymbolized:
                 symbolisedSamplesPath = tmpDirPath.appending("samples.perf")
@@ -85,7 +89,8 @@ extension ProfileRecorderSampler {
                 outputFilePath: rawSamplesPath.string,
                 failIfFileExists: true,
                 count: sampleCount,
-                timeBetweenSamples: timeBetweenSamples
+                timeBetweenSamples: timeBetweenSamples,
+                mode: mode
             )
             let sampleDuration = NIODeadline.now() - sampleStart
             logger.info("raw samples complete", metadata: ["duration": "\(sampleDuration.formattedString)"])

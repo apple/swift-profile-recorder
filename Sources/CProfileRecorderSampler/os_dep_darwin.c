@@ -24,9 +24,8 @@
 #include "os_dep.h"
 #include "asserts.h"
 
-struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
+struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, enum swipr_sampling_mode mode) {
     thread_array_t threads = NULL;
-    mach_msg_type_number_t flavor = THREAD_IDENTIFIER_INFO_COUNT;
     mach_msg_type_number_t threads_count = 0;
     kern_return_t kret = task_threads(mach_task_self(),
                                      &threads,
@@ -41,44 +40,46 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
     }
     memset(all_threads, 0, sizeof(*all_threads) * SWIPR_MAX_MUTATOR_THREADS);
 
-    for (int i = 0; i < threads_count; i++) {
-        pthread_t pthread = pthread_from_mach_thread_np(threads[i]);
-        if (pthread == NULL || threads[i] == mach_thread_self()) {
-            // skip controller and mach threads without corresponding pthreads
-            // set ti_id to 0 so they will be ignored
-            all_threads[i].ti_id = 0;
-            threads_count--;
-            continue;
-        }
-        char name[32] = {0};
-        int getname_ret = pthread_getname_np(pthread, name, sizeof(name));
-        
-        // ignore threads for which we can't get mach info
-        thread_identifier_info_data_t tid_info = {0};
-        kern_return_t info_ret = thread_info(threads[i], THREAD_IDENTIFIER_INFO, (thread_info_t)&tid_info, &flavor);
-        if (info_ret != KERN_SUCCESS) {
-            UNSAFE_DEBUG("failed to get thread_info in create thread list for mach port %llu | %llx\n", threads[i], threads[i]);
-            all_threads[i].ti_id = 0;
-            threads_count--;
+    // mach_thread_self returns a new send right, so take it once and release it below.
+    thread_t controller = mach_thread_self();
+    size_t next_index = 0;
+    for (mach_msg_type_number_t i = 0; i < threads_count; i++) {
+        thread_t thread = threads[i];
+        // O(1) kernel lookups; pthread_from_mach_thread_np and pthread_getname_np walk all threads, O(n) each.
+        thread_extended_info_data_t ext_info;
+        mach_msg_type_number_t ext_count = THREAD_EXTENDED_INFO_COUNT;
+        thread_identifier_info_data_t tid_info;
+        mach_msg_type_number_t tid_count = THREAD_IDENTIFIER_INFO_COUNT;
+        bool keep = thread != controller
+            && next_index < SWIPR_MAX_MUTATOR_THREADS
+            && thread_info(thread, THREAD_EXTENDED_INFO, (thread_info_t)&ext_info, &ext_count) == KERN_SUCCESS
+            // Must be read before thread_suspend, which makes every thread report TH_STATE_WAITING.
+            && (mode != SWIPR_SAMPLING_CPU || ext_info.pth_run_state == TH_STATE_RUNNING)
+            && thread_info(thread, THREAD_IDENTIFIER_INFO, (thread_info_t)&tid_info, &tid_count) == KERN_SUCCESS
+            && tid_info.thread_handle != 0; // mach threads without a pthread
+        if (!keep) {
+            kret = mach_port_deallocate(mach_task_self(), thread);
+            swipr_precondition(kret == KERN_SUCCESS);
             continue;
         }
 
-        all_threads[i].ti_id = tid_info.thread_id;
-        all_threads[i].ti_os_specific.mach_thread = threads[i];
-        if (name[0] == 0) {
-            strcpy(all_threads[i].ti_name, "<n/a>"); // threads may have empty names
+        struct thread_info *info = &all_threads[next_index++];
+        info->ti_id = tid_info.thread_id;
+        info->ti_os_specific.mach_thread = thread;
+        if (ext_info.pth_name[0] == 0) {
+            strcpy(info->ti_name, "<n/a>"); // threads may have empty names
         } else {
-            _Static_assert(sizeof(all_threads[0].ti_name) >= sizeof(name), "destination too small for memcpy");
-            memcpy(all_threads[i].ti_name, name, sizeof(all_threads[i].ti_name));
+            strlcpy(info->ti_name, ext_info.pth_name, sizeof(info->ti_name));
         }
     }
+    kret = mach_port_deallocate(mach_task_self(), controller);
+    swipr_precondition(kret == KERN_SUCCESS);
     kret = vm_deallocate(mach_task_self(),
                          (vm_address_t)threads,
                          threads_count * sizeof(thread_t));
-
     swipr_precondition(kret == KERN_SUCCESS);
-    swipr_precondition(threads_count >= 0);
-    *all_threads_count = (size_t) threads_count;
+
+    *all_threads_count = next_index;
     return all_threads;
 }
 

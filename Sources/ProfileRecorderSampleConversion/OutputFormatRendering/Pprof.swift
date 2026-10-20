@@ -45,7 +45,10 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         }
         let samplesID = stringTable.addAndGetID("samples", type: StringWithID.self)
         let countID = stringTable.addAndGetID("count", type: StringWithID.self)
-        let cpuID = stringTable.addAndGetID("cpu", type: StringWithID.self)
+        let periodTypeID = stringTable.addAndGetID(
+            (sampleConfiguration.mode ?? .wall).rawValue,
+            type: StringWithID.self
+        )
         let nanosecondsID = stringTable.addAndGetID("nanoseconds", type: StringWithID.self)
 
         // Thread label string table entries
@@ -102,7 +105,7 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                 }
             }
             profile.periodType = Perftools_Profiles_ValueType.with {
-                $0.type = Int64(cpuID)
+                $0.type = Int64(periodTypeID)
                 $0.unit = Int64(nanosecondsID)
             }
             profile.timeNanos =
