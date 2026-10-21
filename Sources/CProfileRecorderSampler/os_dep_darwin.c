@@ -245,21 +245,20 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
         // abort incase thread is uninterruptable
         if (info.run_state == TH_STATE_UNINTERRUPTIBLE) {
             thread_abort(thread);
-            continue;
         }
         usleep(sleep_time);
         struct timespec current_time = swipr_sampler_get_current_time();
         float duration = (current_time.tv_sec - start_time.tv_sec) +
                          (current_time.tv_nsec - start_time.tv_nsec) / 1e9f;
         
-        if (duration > SWIPR_NSEC_PER_SEC) {
+        if (duration > 1.0f) {
             // abandon thread
             UNSAFE_DEBUG("Thread timed out during suspension \n");
             return 1;
         }
         
-        // update sleep_time
-        sleep_time = (useconds_t) sleep_time * sleep_mult;
+        // update sleep_time, rounding up so it grows from 1
+        sleep_time = (useconds_t)(sleep_time * sleep_mult) + 1;
     }
     return 0;
 #else
