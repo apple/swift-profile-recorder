@@ -45,16 +45,5 @@ let package = Package(
                 .plugin(name: "BenchmarkPlugin", package: "benchmark")
             ]
         ),
-        .executableTarget(
-            name: "SamplerBenchmarks",
-            dependencies: [
-                .product(name: "Benchmark", package: "benchmark"),
-                .product(name: "ProfileRecorder", package: "swift-profile-recorder"),
-            ],
-            path: "Benchmarks/SamplerBenchmarks",
-            plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "benchmark")
-            ]
-        ),
     ]
 )
