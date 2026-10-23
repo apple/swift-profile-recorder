@@ -34,8 +34,9 @@ struct thread_info;
 #endif
 #include "common.h"
 #include "sampler.h"
+#include "CSampler.h"
 
-struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count);
+struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, enum swipr_sampling_mode mode);
 
 int swipr_os_dep_destroy_thread_list(struct thread_info *thread_list);
 

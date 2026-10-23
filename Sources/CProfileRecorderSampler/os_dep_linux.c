@@ -29,9 +29,9 @@
 #include "interface.h"
 #include "common.h"
 
-// Check if a specific signal is blocked for a given thread.
+// Check if a specific signal is blocked for a given thread, and read its state ('R' = running or runnable).
 // Returns: 1 if signal is blocked, 0 if not blocked, -1 on error.
-static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum) {
+static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum, char *state) {
     if (signum < 1 || signum > 64) {
         return -1;
     }
@@ -51,6 +51,11 @@ static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum) {
         return -1;
     }
     buffer[bytes_read] = '\0';
+
+    const char *state_line = strstr(buffer, "\nState:\t");
+    if (state_line) {
+        *state = state_line[sizeof("\nState:\t") - 1];
+    }
 
     // Find the SigBlk line
     const char *sigblk_line = strstr(buffer, "\nSigBlk:");
@@ -77,7 +82,7 @@ static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum) {
     return (mask & (1ULL << bit_position)) ? 1 : 0;
 }
 
-struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
+struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, enum swipr_sampling_mode mode) {
     struct thread_info *all_threads = calloc(sizeof(struct thread_info), SWIPR_MAX_MUTATOR_THREADS);
     if (!all_threads) {
         return NULL;
@@ -109,10 +114,17 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
         
         pid_t tid = atol(ent->d_name);
         if (tid != 0 && tid != my_tid) {
+            if (next_index >= SWIPR_MAX_MUTATOR_THREADS) {
+                goto out;
+            }
             // Check if SIGPROF is blocked for this thread
-            int sigprof_blocked = swipr_is_signal_blocked(tid, SIGPROF);
+            char state = 0;
+            int sigprof_blocked = swipr_is_signal_blocked(tid, SIGPROF, &state);
             if (sigprof_blocked > 0) {
                 // Skip threads that have SIGPROF blocked
+                continue;
+            }
+            if (mode == SWIPR_SAMPLING_CPU && state != 'R') {
                 continue;
             }
 

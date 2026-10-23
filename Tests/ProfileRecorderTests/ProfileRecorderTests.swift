@@ -153,6 +153,46 @@ final class ProfileRecorderTests: XCTestCase {
         XCTAssertNoThrow(try samples.wait())
     }
 
+    func testCPUModeSkipsWaitingThreads() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let idleThreads = NIOThreadPool(numberOfThreads: 32)
+        idleThreads.start()
+        defer {
+            XCTAssertNoThrow(try idleThreads.syncShutdownGracefully())
+        }
+        let keepSpinning = ManagedAtomic<Bool>(true)
+        defer {
+            keepSpinning.store(false, ordering: .relaxed)
+        }
+        Thread.detachNewThread {
+            while keepSpinning.load(ordering: .relaxed) {}
+        }
+
+        func sampleLines(mode: ProfileRecorderSamplingMode) async throws -> [Substring] {
+            let path = "\(self.tempDirectory!)/samples-\(mode.rawValue).samples"
+            try await ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: path,
+                count: 20,
+                timeBetweenSamples: .nanoseconds(0),
+                mode: mode
+            )
+            let data = try await ByteBuffer(contentsOf: FilePath(path), maximumSizeAllowed: .mebibytes(32))
+            return String(buffer: data).split(separator: "\n")
+        }
+
+        let wall = try await sampleLines(mode: .wall)
+        let cpu = try await sampleLines(mode: .cpu)
+        XCTAssertTrue(cpu.contains { $0.hasPrefix("[SWIPR] CONF") && $0.contains(#""mode": "cpu""#) })
+        let wallSamples = wall.filter { $0.hasPrefix("[SWIPR] SMPL") }.count
+        let cpuSamples = cpu.filter { $0.hasPrefix("[SWIPR] SMPL") }.count
+        XCTAssertGreaterThanOrEqual(wallSamples, 20 * 33, "every thread, every sample")
+        XCTAssertGreaterThanOrEqual(cpuSamples, 1, "the spinning thread")
+        XCTAssertLessThan(cpuSamples, wallSamples / 4, "the 32 idle threads are skipped")
+    }
+
     // Experiencing issues due to the lack of frame pointers
     // (https://github.com/swiftlang/swift-corelibs-libdispatch/issues/909)
     func testSymbolicatedSamplesWork() async throws {
