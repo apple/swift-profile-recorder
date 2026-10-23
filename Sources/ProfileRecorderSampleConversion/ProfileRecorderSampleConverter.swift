@@ -190,7 +190,7 @@ public struct ProfileRecorderSampleConverter: Sendable {
                 // A capture with no samples (an idle process in `cpu` mode) still renders a valid, empty profile.
                 if sampleConfigRead && symboliser == nil {
                     symboliser = CachedSymbolizer(
-                        configuration: .default,
+                        configuration: self.symbolizerConfiguration,
                         symbolizer: underlyingSymbolizer,
                         dynamicLibraryMappings: vmaps,
                         group: group,

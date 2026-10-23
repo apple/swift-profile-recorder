@@ -114,6 +114,9 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, e
         
         pid_t tid = atol(ent->d_name);
         if (tid != 0 && tid != my_tid) {
+            if (next_index >= SWIPR_MAX_MUTATOR_THREADS) {
+                goto out;
+            }
             // Check if SIGPROF is blocked for this thread
             char state = 0;
             int sigprof_blocked = swipr_is_signal_blocked(tid, SIGPROF, &state);
