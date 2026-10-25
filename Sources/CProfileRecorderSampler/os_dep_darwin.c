@@ -18,6 +18,7 @@
 #include <mach/thread_info.h>
 #include <mach/machine/thread_status.h>
 #include <mach-o/dyld.h>
+#include <mach/mach_vm.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -248,6 +249,14 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
 #else
     return 1;
 #endif
+}
+
+bool swipr_os_dep_copy_memory(void *dst, uintptr_t src, size_t len) {
+    // Other threads run while the target is suspended, e.g. pthread_join freeing an exiting thread's top stack page, so
+    // a plain load can fault; the kernel copy fails instead. mincore reports unmapped pages as mapped on Darwin.
+    mach_vm_size_t size = 0;
+    kern_return_t kret = mach_vm_read_overwrite(mach_task_self(), src, len, (mach_vm_address_t)dst, &size);
+    return kret == KERN_SUCCESS && size == len;
 }
 
 int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps) {

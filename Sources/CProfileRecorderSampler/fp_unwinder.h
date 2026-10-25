@@ -24,6 +24,11 @@ struct swipr_fp_unwinder_cursor {
     intptr_t sfuc_ip;
     intptr_t sfuc_original_sp;
     int sfuc_frame_depth;
+    // [sfuc_copy_start, sfuc_copy_end) of the stack, copied through swipr_os_dep_copy_memory; 16k is the largest Darwin
+    // page size, larger Linux pages are copied in 16k pieces.
+    uintptr_t sfuc_copy_start;
+    uintptr_t sfuc_copy_end;
+    uintptr_t sfuc_copy[16384 / sizeof(uintptr_t)];
 };
 
 struct swipr_fp_unwinder_context {

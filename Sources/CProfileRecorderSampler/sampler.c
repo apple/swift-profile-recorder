@@ -155,7 +155,8 @@ swipr_make_sample(struct swipr_minidump *minidumps,
         if (g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id == 0 || all_threads[i].ti_id == 0) {
             continue;
         }
-        struct swipr_fp_unwinder_cursor cursor = { 0 };
+        // Static: the cursor holds a 16k stack copy and only one sampler runs at a time; init sets all but the copy.
+        static struct swipr_fp_unwinder_cursor cursor;
         swipr_fp_unwinder_init(&cursor, &g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context);
         UNSAFE_DEBUG("[%d: %lu] starting unwind\n",
                      i,
@@ -163,7 +164,7 @@ swipr_make_sample(struct swipr_minidump *minidumps,
 
         int ret = -1;
         size_t next_stack_frame_idx = 0;
-        while ((ret = swipr_fp_unwinder_step(&cursor)) > 0 && next_stack_frame_idx < SWIPR_MAX_STACK_DEPTH) {
+        while (next_stack_frame_idx < SWIPR_MAX_STACK_DEPTH && (ret = swipr_fp_unwinder_step(&cursor)) > 0) {
             struct swipr_stackframe *stack_frame = &minidumps[i].md_stack[next_stack_frame_idx++];
             swipr_fp_unwinder_get_reg(&cursor, SWIPR_FP_UNWINDER_REG_IP, &stack_frame->sf_ip);
             swipr_fp_unwinder_get_reg(&cursor, SWIPR_FP_UNWINDER_REG_FP, &stack_frame->sf_sp);

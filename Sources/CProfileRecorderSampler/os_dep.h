@@ -61,6 +61,9 @@ int swipr_os_dep_set_current_thread_name(const char *name);
 
 int swipr_os_dep_get_current_thread_name(char *name, size_t len);
 
+// Copies `len` bytes at `src` without faulting; false if any of it is not readable.
+bool swipr_os_dep_copy_memory(void *dst, uintptr_t src, size_t len);
+
 int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps);
 void swipr_os_dep_suspend_threads(size_t num_threads, struct thread_info *all_threads);
 int swipr_os_dep_sample_cleanup(size_t num_threads, struct thread_info *all_threads);

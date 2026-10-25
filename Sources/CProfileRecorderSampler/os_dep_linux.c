@@ -18,12 +18,14 @@
 #include <dirent.h>
 #include <sys/errno.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <link.h>
 #include <string.h>
 #include <fcntl.h>
+#include <sys/uio.h>
 
 #include "os_dep.h"
 #include "interface.h"
@@ -217,7 +219,32 @@ int swipr_os_dep_get_current_thread_name(char *name, size_t len) {
 #endif
 }
 
+// Set per request: getpid is a syscall, and a forked child must not read its parent.
+static pid_t g_swipr_pid;
+
+// Set once seccomp or an old kernel refuses process_vm_readv.
+static _Atomic bool g_swipr_vm_readv_denied;
+
+bool swipr_os_dep_copy_memory(void *dst, uintptr_t src, size_t len) {
+    // A frame chain through code without frame pointers can point anywhere; the kernel copy fails with EFAULT instead.
+    if (!g_swipr_vm_readv_denied) {
+        struct iovec local = { .iov_base = dst, .iov_len = len };
+        struct iovec remote = { .iov_base = (void *)src, .iov_len = len };
+        if (process_vm_readv(g_swipr_pid, &local, 1, &remote, 1, 0) == (ssize_t)len) {
+            return true;
+        }
+        if (errno != EPERM && errno != ENOSYS) {
+            return false;
+        }
+        g_swipr_vm_readv_denied = true;
+    }
+    // The target is parked in its signal handler, so its stack stays mapped; only a garbage frame pointer can fault.
+    memcpy(dst, (const void *)src, len);
+    return true;
+}
+
 int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps) {
+    g_swipr_pid = getpid();
     for (int i=0; i<num_threads; i++) {
         swipr_precondition(all_threads[i].ti_id != 0);
         g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = all_threads[i].ti_id;
