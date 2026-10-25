@@ -19,6 +19,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 #include <string.h>
+#include <limits.h>
 #include <sys/errno.h>
 
 #include "os_dep.h"
@@ -192,6 +193,42 @@ swipr_make_sample(struct swipr_minidump *minidumps,
     return err;
 }
 
+// Same digits as printf's %lx.
+static char *
+swipr_append_hex(char *out, uintptr_t value) {
+    size_t n = (8 * sizeof(value) - __builtin_clzl(value | 1) + 3) / 4;
+    for (size_t i = n; i > 0; i--) {
+        out[i - 1] = "0123456789abcdef"[value & 0xf];
+        value >>= 4;
+    }
+    return out + n;
+}
+
+#define SWIPR_APPEND_LITERAL(out, str) (memcpy((out), (str), sizeof(str) - 1), (out) + sizeof(str) - 1)
+// Two hex values of up to 2 * sizeof(uintptr_t) digits each.
+#define SWIPR_STCK_LINE_MAX (sizeof("[SWIPR] STCK {\"ip\": \"0x\", \"sp\": \"0x\"}\n") + 4 * sizeof(uintptr_t))
+
+// printf's formatter dominated the sampler's time with deep stacks on macOS, so the hex is written by hand.
+// Writes stay within PIPE_BUF and end at a line end, so each line reaches a stderr pipe whole, as with fprintf.
+static void
+swipr_write_stack(FILE *output, const struct swipr_minidump *minidump) {
+    _Static_assert(PIPE_BUF >= SWIPR_STCK_LINE_MAX, "a stack line must fit in one write");
+    char buf[PIPE_BUF];
+    char *p = buf;
+    for (size_t s=0; s<minidump->md_stack_depth; s++) {
+        if (p + SWIPR_STCK_LINE_MAX > buf + sizeof(buf)) {
+            fwrite(buf, 1, p - buf, output);
+            p = buf;
+        }
+        p = SWIPR_APPEND_LITERAL(p, "[SWIPR] STCK {\"ip\": \"0x");
+        p = swipr_append_hex(p, minidump->md_stack[s].sf_ip);
+        p = SWIPR_APPEND_LITERAL(p, "\", \"sp\": \"0x");
+        p = swipr_append_hex(p, minidump->md_stack[s].sf_sp);
+        p = SWIPR_APPEND_LITERAL(p, "\"}\n");
+    }
+    fwrite(buf, 1, p - buf, output);
+}
+
 int
 swipr_request_sample(FILE *output,
                      size_t sample_count,
@@ -264,16 +301,7 @@ swipr_request_sample(FILE *output,
                     minidump->md_time.tv_nsec
                     );
 
-            for (size_t s=0; s<minidump->md_stack_depth; s++) {
-                fprintf(output,
-                        "[SWIPR] STCK {"
-                        "\"ip\": \"0x%lx\", "
-                        "\"sp\": \"0x%lx\""
-                        "}\n",
-                        minidump->md_stack[s].sf_ip,
-                        minidump->md_stack[s].sf_sp
-                        );
-            }
+            swipr_write_stack(output, minidump);
 
             fprintf(output, "[SWIPR] DONE\n");
         }
