@@ -158,7 +158,7 @@ final class ProfileRecorderTests: XCTestCase {
         guard ProfileRecorderSampler.isSupportedPlatform,
             let seconds = ProcessInfo.processInfo.environment["SWIPR_LONG_RUN_SECONDS"].flatMap(Double.init)
         else {
-            return
+            throw XCTSkip("set SWIPR_LONG_RUN_SECONDS to run the long run")
         }
 
         let keepRunning = ManagedAtomic<Bool>(true)
