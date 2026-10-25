@@ -39,7 +39,7 @@ swipr_os_dep_sem_create(int value) {
     }
 
     *sem = (typeof(*sem)){ 0 };
-    sem->value = 0;
+    sem->value = value;
 
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
