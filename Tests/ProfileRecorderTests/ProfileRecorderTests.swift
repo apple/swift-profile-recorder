@@ -84,6 +84,51 @@ final class ProfileRecorderTests: XCTestCase {
         )
     }
 
+    func testEveryThreadIsSampledEveryTick() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        // Starts the sampler's own threads first so the idle threads come last in the OS thread list.
+        try await ProfileRecorderSampler.sharedInstance.requestSamples(
+            outputFilePath: "\(self.tempDirectory!)/warmup.samples",
+            count: 1,
+            timeBetweenSamples: .nanoseconds(0)
+        )
+
+        let threadCount = 4
+        // Each thread bumps the count once named; -1 releases them.
+        let state = ConditionLock(value: 0)
+        for i in 0..<threadCount {
+            Thread {
+                Thread.current.name = "swipr-idle-\(i)"
+                state.lock(whenValue: i)
+                state.unlock(withValue: i + 1)
+                state.lock(whenValue: -1)
+                state.unlock()
+            }.start()
+        }
+        state.lock(whenValue: threadCount)
+        state.unlock()
+        defer {
+            state.lock()
+            state.unlock(withValue: -1)
+        }
+
+        let ticks = 20
+        let path = "\(self.tempDirectory!)/samples.samples"
+        try await ProfileRecorderSampler.sharedInstance.requestSamples(
+            outputFilePath: path,
+            count: ticks,
+            timeBetweenSamples: .nanoseconds(0)
+        )
+        let data = try await ByteBuffer(contentsOf: FilePath(path), maximumSizeAllowed: .mebibytes(64))
+        let samples = String(buffer: data).split(separator: "\n").filter {
+            $0.hasPrefix("[SWIPR] SMPL") && $0.contains("\"name\": \"swipr-idle-")
+        }.count
+        XCTAssertEqual(samples, ticks * threadCount)
+    }
+
     func testSamplingWithThreadThatBlocksSIGPROF() async throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
