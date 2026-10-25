@@ -248,6 +248,9 @@ swipr_request_sample(FILE *output,
 
         for (size_t t=0; t<num_minidumps; t++) {
             struct swipr_minidump *minidump = &minidumps[t];
+            if (minidump->md_tid == 0) {
+                continue; // not sampled this tick
+            }
             fprintf(output,
                     "[SWIPR] SMPL {"
                     "\"pid\": %d, "

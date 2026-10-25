@@ -407,6 +407,66 @@ final class ProfileRecorderTests: XCTestCase {
         XCTAssertNoThrow(try samples.wait())
     }
 
+    func testWaitingThreadThatMovesToAnotherWaitIsResampled() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        // 0: waits in A, 1: moves to B, 2: exits.
+        let stage = ConditionLock(value: 0)
+        defer {
+            stage.lock()
+            stage.unlock(withValue: 2)
+        }
+        Thread.detachNewThread {
+            Thread.current.name = "swipr-mover"
+            SWIPR_WAIT_A(stage)
+            SWIPR_WAIT_B(stage)
+        }
+
+        let path = "\(self.tempDirectory!)/samples.samples"
+        func moverStacks() throws -> [[Substring]] {
+            let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            var stacks: [[Substring]] = []
+            var current: [Substring]? = nil
+            for line in text.split(separator: "\n") {
+                if line.hasPrefix("[SWIPR] SMPL") {
+                    current = line.contains(#""name": "swipr-mover""#) ? [] : nil
+                } else if line.hasPrefix("[SWIPR] STCK") {
+                    current?.append(line)
+                } else if line.hasPrefix("[SWIPR] DONE"), let stack = current {
+                    stacks.append(stack)
+                    current = nil
+                }
+            }
+            return stacks
+        }
+
+        // The move lands mid-request, after the mover was sampled waiting in A, so a repeated stack would show A again.
+        let request = Task {
+            try await ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: path,
+                count: 60,
+                timeBetweenSamples: .microseconds(500)
+            )
+        }
+        let deadline = DispatchTime.now() + .seconds(5)
+        while try moverStacks().count < 5 {
+            if DispatchTime.now() > deadline {
+                _ = try? await request.value
+                XCTFail("mover sampled \(try moverStacks().count) times, needs 5")
+                return
+            }
+            try await Task.sleep(nanoseconds: 100_000)
+        }
+        stage.lock()
+        stage.unlock(withValue: 1)
+        try await request.value
+
+        let stacks = try moverStacks()
+        XCTAssertNotEqual(stacks.first, stacks.last, "the stack after the move repeats the one before")
+    }
+
     // Experiencing issues due to the lack of frame pointers
     // (https://github.com/swiftlang/swift-corelibs-libdispatch/issues/909)
     func testSymbolicatedSamplesWork() async throws {
@@ -652,4 +712,16 @@ func SWIPR_DEEP_STACK(_ depth: Int, _ body: () -> Void) -> UInt8 {
 func SWIPR_BURST_SPIN(microseconds: Int) {
     let end = DispatchTime.now().uptimeNanoseconds + UInt64(microseconds) * 1_000
     while DispatchTime.now().uptimeNanoseconds < end {}
+}
+
+@inline(never)
+func SWIPR_WAIT_A(_ stage: ConditionLock<Int>) {
+    stage.lock(whenValue: 1)
+    stage.unlock()
+}
+
+@inline(never)
+func SWIPR_WAIT_B(_ stage: ConditionLock<Int>) {
+    stage.lock(whenValue: 2)
+    stage.unlock()
 }

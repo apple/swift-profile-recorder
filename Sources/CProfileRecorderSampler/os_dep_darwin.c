@@ -267,8 +267,10 @@ bool swipr_os_dep_copy_memory(void *dst, uintptr_t src, size_t len) {
 }
 
 int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps) {
+    // The stack stays: swipr_os_dep_sample_threads repeats it if the same thread has not run since.
     for (int i=0; i<num_threads; i++) {
-        minidumps[i] = (typeof(minidumps[i])){ 0 };
+        minidumps[i].md_last_tid = minidumps[i].md_tid;
+        minidumps[i].md_tid = 0;
     }
     return 0;
 }
@@ -284,6 +286,24 @@ void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_thr
         if (all_threads[i].ti_id == 0) {
             continue;
         }
+
+        thread_extended_info_data_t info;
+        mach_msg_type_number_t info_count = THREAD_EXTENDED_INFO_COUNT;
+        if (thread_info(all_threads[i].ti_os_specific.mach_thread, THREAD_EXTENDED_INFO, (thread_info_t)&info, &info_count)
+            != KERN_SUCCESS) {
+            all_threads[i].ti_id = 0;
+            continue;
+        }
+        uint64_t cpu_ns = info.pth_user_time + info.pth_system_time;
+        // A waiting thread whose CPU time has not moved has not run since its last unwind, so its stack is unchanged.
+        if (minidumps[i].md_last_tid == all_threads[i].ti_id && info.pth_run_state == TH_STATE_WAITING
+            && cpu_ns == minidumps[i].md_last_cpu_ns) {
+            minidumps[i].md_tid = all_threads[i].ti_id;
+            minidumps[i].md_time = start_time;
+            strcpy(minidumps[i].md_thread_name, all_threads[i].ti_name);
+            continue;
+        }
+        minidumps[i].md_last_cpu_ns = cpu_ns;
 
         g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = all_threads[i].ti_id;
         kern_return_t kret = thread_suspend(all_threads[i].ti_os_specific.mach_thread);

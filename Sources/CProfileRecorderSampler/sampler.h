@@ -31,6 +31,10 @@ struct swipr_minidump {
     size_t md_stack_depth;
     char md_thread_name[32];
     struct swipr_stackframe md_stack[SWIPR_MAX_STACK_DEPTH];
+
+    // Darwin: the thread whose stack this slot held last tick, and its CPU time then.
+    swipr_os_dep_thread_id md_last_tid;
+    uint64_t md_last_cpu_ns;
 };
 
 // The thread at index `i` must stay stopped for the whole call, or its stack changes under the walk.
