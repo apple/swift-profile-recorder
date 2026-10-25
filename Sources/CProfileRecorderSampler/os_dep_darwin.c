@@ -46,8 +46,8 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
     size_t next_index = 0;
     for (int i = 0; i < threads_count; i++) {
         pthread_t pthread = pthread_from_mach_thread_np(threads[i]);
-        if (pthread == NULL || threads[i] == controller) {
-            // skip controller and mach threads without corresponding pthreads
+        if (pthread == NULL || threads[i] == controller || next_index >= SWIPR_MAX_MUTATOR_THREADS) {
+            // skip controller, mach threads without corresponding pthreads and threads over the limit
             kret = mach_port_deallocate(mach_task_self(), threads[i]);
             swipr_precondition(kret == KERN_SUCCESS);
             continue;
