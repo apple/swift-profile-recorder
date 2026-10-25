@@ -147,6 +147,11 @@ public final class ProfileRecorderSampler: Sendable {
             guard let outputRaw = fopen(outputFilePath, "w\(failIfFileExists ? "x" : "")") else {
                 return eventLoop.makeFailedFuture(CouldNotOpenFileError(path: outputFilePath))
             }
+            // stdio sizes the buffer from st_blksize, 4 KiB on APFS: a write(2) every ~60 stack frames.
+            // Own buffer: glibc ignores the size when `buf` is nil.
+            let bufferSize = 1 << 20
+            nonisolated(unsafe) let buffer = UnsafeMutablePointer<CChar>.allocate(capacity: bufferSize)
+            setvbuf(outputRaw, buffer, _IOFBF, bufferSize)
             let output = CFilePointer(outputRaw)
 
             return self.requestSamples(
@@ -156,6 +161,7 @@ public final class ProfileRecorderSampler: Sendable {
                 eventLoop: eventLoop
             ).always { _ in
                 fclose(output.handle)
+                buffer.deallocate()
             }
         }
     }
