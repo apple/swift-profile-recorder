@@ -138,7 +138,9 @@ out:
     *all_threads_count = next_index;
     return all_threads;
 error:
-    closedir(dir);
+    if (dir) {
+        closedir(dir);
+    }
     swipr_os_dep_destroy_thread_list(all_threads);
     *all_threads_count = 0;
     return NULL;
