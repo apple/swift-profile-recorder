@@ -65,7 +65,9 @@ int swipr_os_dep_get_current_thread_name(char *name, size_t len);
 bool swipr_os_dep_copy_memory(void *dst, uintptr_t src, size_t len);
 
 int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps);
-void swipr_os_dep_suspend_threads(size_t num_threads, struct thread_info *all_threads);
+// Stops, unwinds into `minidumps` and releases each thread before stopping the next.
+void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
+                                 struct timespec start_time);
 int swipr_os_dep_sample_cleanup(size_t num_threads, struct thread_info *all_threads);
 
 #endif /* swipr_os_dep_h */

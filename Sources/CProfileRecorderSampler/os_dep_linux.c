@@ -280,53 +280,54 @@ int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_thre
     return 0;
 }
 
-void swipr_os_dep_suspend_threads(size_t num_threads, struct thread_info *all_threads) {
+void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
+                                 struct timespec start_time) {
     int err;
+    // Threads not signalled once a tick has spent this long are skipped, so stragglers can't stretch a tick to minutes.
+    swipr_os_dep_deadline tick_deadline = swipr_os_dep_create_deadline(SWIPR_NSEC_PER_SEC);
     for (int i=0; i<num_threads; i++) {
         swipr_precondition(all_threads[i].ti_id != 0);
-        UNSAFE_DEBUG("signalling thread %lu\n", (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id);
+        swipr_os_dep_thread_id thread_id = g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id;
+        swipr_os_dep_deadline now = swipr_os_dep_create_deadline(0);
+        if (now.tv_sec > tick_deadline.tv_sec
+            || (now.tv_sec == tick_deadline.tv_sec && now.tv_nsec >= tick_deadline.tv_nsec)) {
+            g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+            continue;
+        }
+        UNSAFE_DEBUG("signalling thread %lu\n", (uintptr_t)thread_id);
         err = swipr_os_dep_kill(all_threads[i].ti_id, SIGPROF);
         if (err != 0) {
-            UNSAFE_DEBUG("couldn't signal thread %lu\n", (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id);
-            // thread dead, let's not wait for it later.
+            UNSAFE_DEBUG("couldn't signal thread %lu\n", (uintptr_t)thread_id);
             g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+            continue;
         }
-    }
-
-    swipr_os_dep_deadline deadline = swipr_os_dep_create_deadline(SWIPR_NSEC_PER_SEC);
-
-    for (int i=0; i<num_threads; i++) {
-        swipr_os_dep_thread_id thread_id = g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id;
-        if (thread_id > 0) {
-            err = swipr_os_dep_sem_wait_with_deadline(g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed, deadline);
-            if (err) {
-                if (swipr_os_dep_kill(thread_id, 0) == -1 && errno == ESRCH) {
-                    UNSAFE_DEBUG("thread %d/%ld died, that's probably okay\n",
-                                 i, (long)thread_id);
-                    g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
-                } else {
-                    UNSAFE_DEBUG("OUCH, timeout, thread still alive but no response %d/%d of %zu\n",
-                                 i, thread_id, num_threads);
-                    // FIXME: We can't just continue here...
-                    g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
-                }
+        // Kept long: a handler that answers after the timeout is not cancelled and is unsafe (see FIXME below).
+        swipr_os_dep_deadline deadline = swipr_os_dep_create_deadline(SWIPR_NSEC_PER_SEC);
+        err = swipr_os_dep_sem_wait_with_deadline(g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed, deadline);
+        if (err) {
+            if (swipr_os_dep_kill(thread_id, 0) == -1 && errno == ESRCH) {
+                UNSAFE_DEBUG("thread %d/%ld died, that's probably okay\n", i, (long)thread_id);
+            } else {
+                UNSAFE_DEBUG("OUCH, timeout, thread still alive but no response %d/%ld of %zu\n",
+                             i, (long)thread_id, num_threads);
+                // FIXME: We can't just continue here...
             }
+            g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+            continue;
         }
+        swipr_sampler_unwind_thread(i, &minidumps[i], all_threads[i].ti_name, start_time);
+        // c2m_thread_id stays set, so cleanup waits for the handler's exit post before freeing the semaphores.
+        swipr_os_dep_sem_signal(g_swipr_c2ms.c2ms_c2ms[i].c2m_proceed);
     }
 }
 
 int swipr_os_dep_sample_cleanup(size_t num_threads, struct thread_info *all_threads) {
     for (int i=0; i<num_threads; i++) {
-        if (g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id > 0) {
-            swipr_os_dep_sem_signal(g_swipr_c2ms.c2ms_c2ms[i].c2m_proceed);
-        }
-    }
-    int err;
-    for (int i=0; i<num_threads; i++) {
+        // Released by swipr_os_dep_sample_threads; its handler posts m2c_proceed on its way out.
         swipr_os_dep_thread_id thread_id = g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id;
         if (thread_id > 0) {
             swipr_os_dep_deadline deadline = swipr_os_dep_create_deadline(100 * SWIPR_NSEC_PER_MSEC);
-            err = swipr_os_dep_sem_wait_with_deadline(g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed, deadline);
+            int err = swipr_os_dep_sem_wait_with_deadline(g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed, deadline);
             if (err) {
                 UNSAFE_DEBUG("OUTCH, timeout (B), thread %d/%ld of %zu\n",
                              i, (long)thread_id, num_threads);
@@ -340,8 +341,7 @@ int swipr_os_dep_sample_cleanup(size_t num_threads, struct thread_info *all_thre
         g_swipr_c2ms.c2ms_c2ms[i].c2m_proceed = NULL;
         g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed = NULL;
     }
-    err = swipr_os_dep_destroy_thread_list(all_threads);
-    return err;
+    return swipr_os_dep_destroy_thread_list(all_threads);
 }
 
 

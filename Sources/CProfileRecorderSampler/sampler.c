@@ -122,6 +122,40 @@ swipr_initialise_c2ms(FILE *output) {
     return swipr_dump_shared_objs(output);
 }
 
+void
+swipr_sampler_unwind_thread(int i, struct swipr_minidump *minidump, const char *thread_name, struct timespec time) {
+    // Static: the cursor holds a 16k stack copy and only one sampler runs at a time; init sets all but the copy.
+    static struct swipr_fp_unwinder_cursor cursor;
+    swipr_fp_unwinder_init(&cursor, &g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context);
+    UNSAFE_DEBUG("[%d: %lu] starting unwind\n",
+                 i,
+                 (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id);
+
+    int ret = -1;
+    size_t next_stack_frame_idx = 0;
+    while (next_stack_frame_idx < SWIPR_MAX_STACK_DEPTH && (ret = swipr_fp_unwinder_step(&cursor)) > 0) {
+        struct swipr_stackframe *stack_frame = &minidump->md_stack[next_stack_frame_idx++];
+        swipr_fp_unwinder_get_reg(&cursor, SWIPR_FP_UNWINDER_REG_IP, &stack_frame->sf_ip);
+        swipr_fp_unwinder_get_reg(&cursor, SWIPR_FP_UNWINDER_REG_FP, &stack_frame->sf_sp);
+        UNSAFE_DEBUG("[%d: %lu] ip=%lx, sp=%lx, ret=%d\n",
+                     i,
+                     (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id,
+                     stack_frame->sf_ip,
+                     stack_frame->sf_sp,
+                     ret);
+    }
+
+    UNSAFE_DEBUG("[%d: %lu] unwind done, ret=%d\n",
+                 i,
+                 (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id,
+                 ret);
+    minidump->md_stack_depth = next_stack_frame_idx;
+    minidump->md_time = time;
+    minidump->md_pid = getpid();
+    minidump->md_tid = g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id;
+    strcpy(minidump->md_thread_name, thread_name);
+}
+
 static int
 swipr_make_sample(struct swipr_minidump *minidumps,
                  size_t minidumps_capacity,
@@ -148,45 +182,9 @@ swipr_make_sample(struct swipr_minidump *minidumps,
 
     swipr_state_start_sampling();
     struct timespec start_time = swipr_sampler_get_current_time();
-    swipr_os_dep_suspend_threads(num_threads, all_threads);
+    swipr_os_dep_sample_threads(num_threads, all_threads, minidumps, start_time);
     
     swipr_state_start_processing();
-    for (int i=0; i<num_threads; i++) {
-        if (g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id == 0 || all_threads[i].ti_id == 0) {
-            continue;
-        }
-        // Static: the cursor holds a 16k stack copy and only one sampler runs at a time; init sets all but the copy.
-        static struct swipr_fp_unwinder_cursor cursor;
-        swipr_fp_unwinder_init(&cursor, &g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context);
-        UNSAFE_DEBUG("[%d: %lu] starting unwind\n",
-                     i,
-                     (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id);
-
-        int ret = -1;
-        size_t next_stack_frame_idx = 0;
-        while (next_stack_frame_idx < SWIPR_MAX_STACK_DEPTH && (ret = swipr_fp_unwinder_step(&cursor)) > 0) {
-            struct swipr_stackframe *stack_frame = &minidumps[i].md_stack[next_stack_frame_idx++];
-            swipr_fp_unwinder_get_reg(&cursor, SWIPR_FP_UNWINDER_REG_IP, &stack_frame->sf_ip);
-            swipr_fp_unwinder_get_reg(&cursor, SWIPR_FP_UNWINDER_REG_FP, &stack_frame->sf_sp);
-            UNSAFE_DEBUG("[%d: %lu] ip=%lx, sp=%lx, ret=%d\n",
-                         i,
-                         (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id,
-                         stack_frame->sf_ip,
-                         stack_frame->sf_sp,
-                         ret);
-        }
-
-        UNSAFE_DEBUG("[%d: %lu] unwind done, ret=%d\n",
-                     i,
-                     (uintptr_t)g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id,
-                     ret);
-        minidumps[i].md_stack_depth = next_stack_frame_idx;
-        minidumps[i].md_time = start_time;
-        minidumps[i].md_pid = getpid();
-        minidumps[i].md_tid = g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id;
-        strcpy(minidumps[i].md_thread_name, all_threads[i].ti_name);
-    }
-
     swipr_state_finish_processing();
     
     err = swipr_os_dep_sample_cleanup(num_threads, all_threads);

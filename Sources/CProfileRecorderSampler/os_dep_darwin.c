@@ -204,6 +204,13 @@ int swipr_os_dep_get_current_thread_name(char *name, size_t len) {
     return 0;
 }
 
+static void swipr_resume_thread(thread_act_t thread) {
+    kern_return_t kret = thread_resume(thread);
+    // We hold a suspension, so resume fails only for a thread that exited meanwhile.
+    swipr_precondition(kret == KERN_SUCCESS || kret == MACH_SEND_INVALID_DEST || kret == KERN_INVALID_ARGUMENT ||
+                       kret == KERN_TERMINATED || kret == MIG_SERVER_DIED);
+}
+
 static int swipr_wait_for_thread_suspend(thread_act_t thread) {
 #if TARGET_OS_OSX || TARGET_OS_IOS
     kern_return_t kr;
@@ -266,7 +273,8 @@ int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_thre
     return 0;
 }
 
-void swipr_os_dep_suspend_threads(size_t num_threads, struct thread_info *all_threads) {
+void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
+                                 struct timespec start_time) {
 #if TARGET_OS_OSX || TARGET_OS_IOS
     // For Darwin - controller thread suspends and resumes each mutator
     // We ignore thread iff ti_id == 0
@@ -289,27 +297,26 @@ void swipr_os_dep_suspend_threads(size_t num_threads, struct thread_info *all_th
         int has_suspended = swipr_wait_for_thread_suspend(all_threads[i].ti_os_specific.mach_thread);
         if (has_suspended != 0) {
             all_threads[i].ti_id = 0;
+            swipr_resume_thread(all_threads[i].ti_os_specific.mach_thread);
             continue;
         }
         
 #if defined(__x86_64__)
-        x86_thread_state64_t state;
+        x86_thread_state64_t state = { 0 };
         mach_msg_type_number_t count = x86_THREAD_STATE64_COUNT;
         thread_state_flavor_t flavor = x86_THREAD_STATE64;
         
         kret = thread_get_state(all_threads[i].ti_os_specific.mach_thread, flavor, (thread_state_t)&state, &count);
-        swipr_precondition(kret == KERN_SUCCESS);
 
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_fp = state.__rbp;
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_sp = state.__rsp;
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_ip = state.__rip;
 #elif defined(__aarch64__)
-        arm_thread_state64_t state;
+        arm_thread_state64_t state = { 0 };
         mach_msg_type_number_t count = ARM_THREAD_STATE64_COUNT;
         thread_state_flavor_t flavor = ARM_THREAD_STATE64;
 
         kret = thread_get_state(all_threads[i].ti_os_specific.mach_thread, flavor, (thread_state_t)&state, &count);
-        swipr_precondition(kret == KERN_SUCCESS);
 
 
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_fp = arm_thread_state64_get_fp(state);
@@ -321,23 +328,21 @@ void swipr_os_dep_suspend_threads(size_t num_threads, struct thread_info *all_th
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_sp = 0;
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_ip = 0;
 #endif
+        if (kret == KERN_SUCCESS) {
+            swipr_sampler_unwind_thread(i, &minidumps[i], all_threads[i].ti_name, start_time);
+        } else {
+            // Usually the thread exited after thread_suspend, but XNU also returns KERN_ABORTED for a live thread.
+            all_threads[i].ti_id = 0;
+        }
+        swipr_resume_thread(all_threads[i].ti_os_specific.mach_thread);
     }
-#else
-    return 1; // unsupported OS
 #endif
 }
 
 int swipr_os_dep_sample_cleanup(size_t num_threads, struct thread_info *all_threads) {
 #if TARGET_OS_OSX || TARGET_OS_IOS
-    for (mach_msg_type_number_t i=0; i<num_threads; i++) {
-        if (all_threads[i].ti_id == 0) {
-            continue;
-        }
-        kern_return_t kret = thread_resume(all_threads[i].ti_os_specific.mach_thread);
-        swipr_precondition(kret == KERN_SUCCESS);
-    }
-    int err = swipr_os_dep_destroy_thread_list(all_threads);
-    return err;
+    // swipr_os_dep_sample_threads resumes each thread it suspended.
+    return swipr_os_dep_destroy_thread_list(all_threads);
 #else
     return 1; // unsupported OS
 #endif
