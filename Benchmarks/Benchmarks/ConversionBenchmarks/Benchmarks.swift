@@ -20,7 +20,7 @@ import ProfileRecorder
 import _ProfileRecorderSampleConversion
 import SampleWorkload
 
-let benchmarks = {
+let benchmarks: @Sendable () -> Void = {
     Benchmark.defaultConfiguration = .init(
         warmupIterations: 1,
         maxDuration: .seconds(3)

@@ -1,4 +1,4 @@
-// swift-tools-version:5.10
+// swift-tools-version:6.0
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the Swift Profile Recorder open source project
@@ -18,11 +18,12 @@ import PackageDescription
 let package = Package(
     name: "benchmarks",
     platforms: [
-        .macOS(.v14)
+        .macOS(.v15)
     ],
     dependencies: [
         .package(path: "../"),
         .package(url: "https://github.com/ordo-one/benchmark.git", from: "1.29.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.99.0"),
     ],
     targets: [
         .target(
@@ -41,6 +42,18 @@ let package = Package(
                 .product(name: "_ProfileRecorderSampleConversion", package: "swift-profile-recorder"),
             ],
             path: "Benchmarks/ConversionBenchmarks",
+            plugins: [
+                .plugin(name: "BenchmarkPlugin", package: "benchmark")
+            ]
+        ),
+        .executableTarget(
+            name: "SamplingOverheadBenchmarks",
+            dependencies: [
+                .product(name: "Benchmark", package: "benchmark"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "ProfileRecorder", package: "swift-profile-recorder"),
+            ],
+            path: "Benchmarks/SamplingOverheadBenchmarks",
             plugins: [
                 .plugin(name: "BenchmarkPlugin", package: "benchmark")
             ]
