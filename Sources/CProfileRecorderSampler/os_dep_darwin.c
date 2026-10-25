@@ -25,6 +25,12 @@
 #include "asserts.h"
 
 struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
+    // Allocated first: task_threads hands out a port right per thread, which a later failure would leak.
+    struct thread_info *all_threads = calloc(SWIPR_MAX_MUTATOR_THREADS, sizeof(struct thread_info));
+    if (!all_threads) {
+        *all_threads_count = 0;
+        return NULL;
+    }
     thread_array_t threads = NULL;
     mach_msg_type_number_t flavor = THREAD_IDENTIFIER_INFO_COUNT;
     mach_msg_type_number_t threads_count = 0;
@@ -32,11 +38,8 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
                                      &threads,
                                      &threads_count);
     if (kret) {
+        free(all_threads);
         *all_threads_count = 0;
-        return NULL;
-    }
-    struct thread_info *all_threads = calloc(SWIPR_MAX_MUTATOR_THREADS, sizeof(struct thread_info));
-    if (!all_threads) {
         return NULL;
     }
     memset(all_threads, 0, sizeof(*all_threads) * SWIPR_MAX_MUTATOR_THREADS);
