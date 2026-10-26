@@ -280,39 +280,53 @@ int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_thre
     return 0;
 }
 
+static void swipr_signal_thread(int i, struct thread_info *all_threads, swipr_os_dep_deadline tick_deadline) {
+    swipr_precondition(all_threads[i].ti_id != 0);
+    swipr_os_dep_deadline now = swipr_os_dep_create_deadline(0);
+    if (now.tv_sec > tick_deadline.tv_sec
+        || (now.tv_sec == tick_deadline.tv_sec && now.tv_nsec >= tick_deadline.tv_nsec)) {
+        g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+        return;
+    }
+    UNSAFE_DEBUG("signalling thread %lu\n", (uintptr_t)all_threads[i].ti_id);
+    if (swipr_os_dep_kill(all_threads[i].ti_id, SIGPROF) != 0) {
+        UNSAFE_DEBUG("couldn't signal thread %lu\n", (uintptr_t)all_threads[i].ti_id);
+        g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+    }
+}
+
 void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
                                  struct timespec start_time) {
     int err;
     // Threads not signalled once a tick has spent this long are skipped, so stragglers can't stretch a tick to minutes.
     swipr_os_dep_deadline tick_deadline = swipr_os_dep_create_deadline(SWIPR_NSEC_PER_SEC);
+    if (num_threads > 0) {
+        swipr_signal_thread(0, all_threads, tick_deadline);
+    }
     for (int i=0; i<num_threads; i++) {
-        swipr_precondition(all_threads[i].ti_id != 0);
         swipr_os_dep_thread_id thread_id = g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id;
-        swipr_os_dep_deadline now = swipr_os_dep_create_deadline(0);
-        if (now.tv_sec > tick_deadline.tv_sec
-            || (now.tv_sec == tick_deadline.tv_sec && now.tv_nsec >= tick_deadline.tv_nsec)) {
-            g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
-            continue;
-        }
-        UNSAFE_DEBUG("signalling thread %lu\n", (uintptr_t)thread_id);
-        err = swipr_os_dep_kill(all_threads[i].ti_id, SIGPROF);
-        if (err != 0) {
-            UNSAFE_DEBUG("couldn't signal thread %lu\n", (uintptr_t)thread_id);
-            g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
-            continue;
-        }
-        // Kept long: a handler that answers after the timeout is not cancelled and is unsafe (see FIXME below).
-        swipr_os_dep_deadline deadline = swipr_os_dep_create_deadline(SWIPR_NSEC_PER_SEC);
-        err = swipr_os_dep_sem_wait_with_deadline(g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed, deadline);
-        if (err) {
-            if (swipr_os_dep_kill(thread_id, 0) == -1 && errno == ESRCH) {
-                UNSAFE_DEBUG("thread %d/%ld died, that's probably okay\n", i, (long)thread_id);
-            } else {
-                UNSAFE_DEBUG("OUCH, timeout, thread still alive but no response %d/%ld of %zu\n",
-                             i, (long)thread_id, num_threads);
-                // FIXME: We can't just continue here...
+        if (thread_id != 0) {
+            // Kept long: a handler that answers after the timeout is not cancelled and is unsafe (see FIXME below).
+            swipr_os_dep_deadline deadline = swipr_os_dep_create_deadline(SWIPR_NSEC_PER_SEC);
+            err = swipr_os_dep_sem_wait_with_deadline(g_swipr_c2ms.c2ms_c2ms[i].m2c_proceed, deadline);
+            if (err) {
+                if (swipr_os_dep_kill(thread_id, 0) == -1 && errno == ESRCH) {
+                    UNSAFE_DEBUG("thread %d/%ld died, that's probably okay\n", i, (long)thread_id);
+                } else {
+                    UNSAFE_DEBUG("OUCH, timeout, thread still alive but no response %d/%ld of %zu\n",
+                                 i, (long)thread_id, num_threads);
+                    // FIXME: We can't just continue here...
+                }
+                g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+                thread_id = 0;
             }
-            g_swipr_c2ms.c2ms_c2ms[i].c2m_thread_id = 0;
+        }
+        // The next signal's delivery overlaps this unwind. Sent only once thread i is parked or skipped, and thread i
+        // is released before the next wait: a parked thread can hold a lock the next one needs to take the signal.
+        if (i + 1 < num_threads) {
+            swipr_signal_thread(i + 1, all_threads, tick_deadline);
+        }
+        if (thread_id == 0) {
             continue;
         }
         swipr_sampler_unwind_thread(i, &minidumps[i], all_threads[i].ti_name, start_time);
