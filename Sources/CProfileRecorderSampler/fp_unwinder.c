@@ -28,20 +28,23 @@ void swipr_fp_unwinder_init(struct swipr_fp_unwinder_cursor *cursor, struct swip
 
 static bool swipr_fp_unwinder_read_frame_record(struct swipr_fp_unwinder_cursor *cursor, uintptr_t fp,
                                                 uintptr_t record[2]) {
-    if (fp < cursor->sfuc_copy_start || fp + 2 * sizeof(uintptr_t) > cursor->sfuc_copy_end) {
+    const uintptr_t record_size = 2 * sizeof(uintptr_t);
+    if ((fp < cursor->sfuc_copy_start) || ((fp + record_size) > cursor->sfuc_copy_end)) {
         uintptr_t page_size = (uintptr_t)getpagesize();
-        uintptr_t end = (fp & ~(page_size - 1)) + page_size;
-        if (end - fp < 2 * sizeof(uintptr_t)) {
-            end = fp + 2 * sizeof(uintptr_t);
+        uintptr_t past_the_end_of_page_containing_fp = (fp & ~(page_size - 1)) + page_size;
+        // Stop at the page end: the page past the stack's last one can be unmapped, and a read touching it fails whole.
+        uintptr_t copy_end = past_the_end_of_page_containing_fp;
+        if ((copy_end - fp) < record_size) {
+            copy_end = fp + record_size;
         }
-        if (end - fp > sizeof(cursor->sfuc_copy)) {
-            end = fp + sizeof(cursor->sfuc_copy);
+        if ((copy_end - fp) > SWIPR_FP_UNWINDER_COPY_SIZE) {
+            copy_end = fp + SWIPR_FP_UNWINDER_COPY_SIZE;
         }
-        if (!swipr_os_dep_copy_memory(cursor->sfuc_copy, fp, end - fp)) {
+        if (!swipr_os_dep_copy_memory(cursor->sfuc_copy, fp, copy_end - fp)) {
             return false;
         }
         cursor->sfuc_copy_start = fp;
-        cursor->sfuc_copy_end = end;
+        cursor->sfuc_copy_end = copy_end;
     }
     const uintptr_t *words = &cursor->sfuc_copy[(fp - cursor->sfuc_copy_start) / sizeof(uintptr_t)];
     record[0] = words[0];
