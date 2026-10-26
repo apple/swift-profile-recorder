@@ -113,6 +113,14 @@ swipr_os_dep_sem_wait(swipr_os_dep_sem sem) {
 
 static inline int
 swipr_os_dep_sem_wait_with_deadline(swipr_os_dep_sem sem, swipr_os_dep_deadline deadline) {
+    // The post is usually microseconds away; spinning first skips the scheduler wake-up of a sleeping waiter.
+    for (int spin = 0; spin < 2000 && __atomic_load_n(&sem->value, __ATOMIC_ACQUIRE) <= 0; spin++) {
+#if defined(__x86_64__)
+        __builtin_ia32_pause();
+#elif defined(__aarch64__) || defined(__arm__)
+        __asm__ volatile("yield");
+#endif
+    }
     int err = pthread_mutex_lock(&sem->mutex);
     swipr_precondition(err == 0);
 

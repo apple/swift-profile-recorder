@@ -31,22 +31,18 @@
 #include "interface.h"
 #include "common.h"
 
-// Check if a specific signal is blocked for a given thread.
-// Returns: 1 if signal is blocked, 0 if not blocked, -1 on error.
-static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum) {
-    if (signum < 1 || signum > 64) {
-        return -1;
-    }
-
+// Reads the name and whether SIGPROF is blocked from /proc/self/task/<tid>/stat, one file instead of status and comm.
+// Returns: 0 on success, -1 on error.
+static int swipr_read_thread_stat(swipr_os_dep_thread_id tid, char *name, size_t name_size, bool *sigprof_blocked) {
     char path[64];
-    snprintf(path, sizeof(path), "/proc/self/task/%d/status", tid);
+    snprintf(path, sizeof(path), "/proc/self/task/%d/stat", tid);
 
     int fd = open(path, O_RDONLY);
     if (fd < 0) {
         return -1;
     }
 
-    char buffer[4096];
+    char buffer[1024];
     ssize_t bytes_read = read(fd, buffer, sizeof(buffer) - 1);
     int close_result = close(fd);
     if (bytes_read <= 0 || (close_result != 0 && !(close_result == -1 && errno == EINTR))) {
@@ -54,29 +50,33 @@ static int swipr_is_signal_blocked(swipr_os_dep_thread_id tid, int signum) {
     }
     buffer[bytes_read] = '\0';
 
-    // Find the SigBlk line
-    const char *sigblk_line = strstr(buffer, "\nSigBlk:");
-    if (!sigblk_line) {
-        sigblk_line = strstr(buffer, "SigBlk:");
-        if (!sigblk_line) {
+    // Field 2 is the name in parentheses; it may itself contain ')', so the last one ends it.
+    const char *name_start = strchr(buffer, '(');
+    const char *name_end = strrchr(buffer, ')');
+    if (!name_start || !name_end || name_end < name_start) {
+        return -1;
+    }
+    name_start++;
+    size_t name_length = (size_t)(name_end - name_start);
+    if (name_length >= name_size) {
+        name_length = name_size - 1;
+    }
+
+    // Field 32 is the blocked mask in decimal; it covers signals 1-31 only, SIGPROF included.
+    const char *field = name_end + 2;
+    for (int field_number = 3; field_number < 32; field_number++) {
+        field = strchr(field, ' ');
+        if (!field) {
             return -1;
         }
-    } else {
-        sigblk_line++; // Skip the newline
+        field++;
     }
+    unsigned long long mask = strtoull(field, NULL, 10);
 
-    // Skip "SigBlk:" and whitespace
-    sigblk_line += 7;
-    while (*sigblk_line == ' ' || *sigblk_line == '\t') {
-        sigblk_line++;
-    }
-
-    // Parse the hexadecimal mask
-    unsigned long long mask = strtoull(sigblk_line, NULL, 16);
-
-    // Check if the signal bit is set (signals are 1-indexed)
-    int bit_position = signum - 1;
-    return (mask & (1ULL << bit_position)) ? 1 : 0;
+    memcpy(name, name_start, name_length);
+    name[name_length] = '\0';
+    *sigprof_blocked = (mask & (1ULL << (SIGPROF - 1))) != 0;
+    return 0;
 }
 
 struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
@@ -111,27 +111,16 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
         
         pid_t tid = atol(ent->d_name);
         if (tid != 0 && tid != my_tid) {
-            // Check if SIGPROF is blocked for this thread
-            int sigprof_blocked = swipr_is_signal_blocked(tid, SIGPROF);
-            if (sigprof_blocked > 0) {
+            struct thread_info *thread = &all_threads[next_index];
+            bool sigprof_blocked = false;
+            if (swipr_read_thread_stat(tid, thread->ti_name, sizeof(thread->ti_name), &sigprof_blocked) != 0) {
+                thread->ti_name[0] = '\0';
+            } else if (sigprof_blocked) {
                 // Skip threads that have SIGPROF blocked
                 continue;
             }
-
-            int idx = next_index++;
-            all_threads[idx].ti_id = tid;
-            char file_path[128] = {0};
-            snprintf(file_path, 128, "/proc/self/task/%d/comm", tid);
-            int fd = open(file_path, O_RDONLY);
-            if (fd >= 0) {
-                int how_much = read(fd, all_threads[idx].ti_name, 32);
-                all_threads[idx].ti_name[how_much > 0 ? how_much-1 : 0] = 0; // get rid of the \n
-                int ret = close(fd);
-                // continue if close successful or failed due to interrupt
-                if (!(ret == 0 || (ret == -1 && errno == EINTR))) {
-                    goto error;
-                }
-            }
+            next_index++;
+            thread->ti_id = tid;
         }
     }
     
