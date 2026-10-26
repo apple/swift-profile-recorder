@@ -149,7 +149,7 @@ public final class ProfileRecorderSampler: Sendable {
             }
             // stdio sizes the buffer from st_blksize, 4 KiB on APFS: a write(2) every ~60 stack frames.
             // Own buffer: glibc ignores the size when `buf` is nil.
-            let bufferSize = 1 << 20
+            let bufferSize = 1 * 1024 * 1024 // 1 MiB
             nonisolated(unsafe) let buffer = UnsafeMutablePointer<CChar>.allocate(capacity: bufferSize)
             setvbuf(outputRaw, buffer, _IOFBF, bufferSize)
             let output = CFilePointer(outputRaw)

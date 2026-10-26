@@ -193,10 +193,30 @@ swipr_make_sample(struct swipr_minidump *minidumps,
     return err;
 }
 
+#define SWIPR_STCK_IP "[SWIPR] STCK {\"ip\": \"0x"
+#define SWIPR_STCK_SP "\", \"sp\": \"0x"
+#define SWIPR_STCK_END "\"}\n"
+// Two hex values of up to 2 * sizeof(uintptr_t) digits each.
+#define SWIPR_STCK_LINE_MAX (sizeof(SWIPR_STCK_IP SWIPR_STCK_SP SWIPR_STCK_END) - 1 + 4 * sizeof(uintptr_t))
+// Each write stays within PIPE_BUF and ends at a line end, so a line reaches a stderr pipe whole, as with fprintf.
+#define SWIPR_STCK_BUF_SIZE PIPE_BUF
+_Static_assert(SWIPR_STCK_BUF_SIZE >= SWIPR_STCK_LINE_MAX, "a stack line must fit in one write");
+
+static char *
+swipr_append(char *out, const char *end, const char *str, size_t len) {
+    swipr_precondition(len <= (size_t)(end - out));
+    memcpy(out, str, len);
+    return out + len;
+}
+
+// `"" str` only compiles for a string literal, so `sizeof` cannot be a pointer's size.
+#define SWIPR_APPEND_LITERAL(out, end, str) swipr_append((out), (end), (str), sizeof("" str) - 1)
+
 // Same digits as printf's %lx.
 static char *
-swipr_append_hex(char *out, uintptr_t value) {
+swipr_append_hex(char *out, const char *end, uintptr_t value) {
     size_t n = (8 * sizeof(value) - __builtin_clzl(value | 1) + 3) / 4;
+    swipr_precondition(n <= (size_t)(end - out));
     for (size_t i = n; i > 0; i--) {
         out[i - 1] = "0123456789abcdef"[value & 0xf];
         value >>= 4;
@@ -204,27 +224,23 @@ swipr_append_hex(char *out, uintptr_t value) {
     return out + n;
 }
 
-#define SWIPR_APPEND_LITERAL(out, str) (memcpy((out), (str), sizeof(str) - 1), (out) + sizeof(str) - 1)
-// Two hex values of up to 2 * sizeof(uintptr_t) digits each.
-#define SWIPR_STCK_LINE_MAX (sizeof("[SWIPR] STCK {\"ip\": \"0x\", \"sp\": \"0x\"}\n") + 4 * sizeof(uintptr_t))
-
 // printf's formatter dominated the sampler's time with deep stacks on macOS, so the hex is written by hand.
-// Writes stay within PIPE_BUF and end at a line end, so each line reaches a stderr pipe whole, as with fprintf.
 static void
-swipr_write_stack(FILE *output, const struct swipr_minidump *minidump) {
-    _Static_assert(PIPE_BUF >= SWIPR_STCK_LINE_MAX, "a stack line must fit in one write");
-    char buf[PIPE_BUF];
+swipr_write_stack(FILE *output, const struct swipr_minidump *minidump, char *buf) {
+    const char *end = buf + SWIPR_STCK_BUF_SIZE;
     char *p = buf;
     for (size_t s=0; s<minidump->md_stack_depth; s++) {
-        if (p + SWIPR_STCK_LINE_MAX > buf + sizeof(buf)) {
+        if ((size_t)(end - p) < SWIPR_STCK_LINE_MAX) {
             fwrite(buf, 1, p - buf, output);
             p = buf;
         }
-        p = SWIPR_APPEND_LITERAL(p, "[SWIPR] STCK {\"ip\": \"0x");
-        p = swipr_append_hex(p, minidump->md_stack[s].sf_ip);
-        p = SWIPR_APPEND_LITERAL(p, "\", \"sp\": \"0x");
-        p = swipr_append_hex(p, minidump->md_stack[s].sf_sp);
-        p = SWIPR_APPEND_LITERAL(p, "\"}\n");
+        const char *line = p;
+        p = SWIPR_APPEND_LITERAL(p, end, SWIPR_STCK_IP);
+        p = swipr_append_hex(p, end, minidump->md_stack[s].sf_ip);
+        p = SWIPR_APPEND_LITERAL(p, end, SWIPR_STCK_SP);
+        p = swipr_append_hex(p, end, minidump->md_stack[s].sf_sp);
+        p = SWIPR_APPEND_LITERAL(p, end, SWIPR_STCK_END);
+        swipr_precondition((size_t)(p - line) <= SWIPR_STCK_LINE_MAX);
     }
     fwrite(buf, 1, p - buf, output);
 }
@@ -238,6 +254,7 @@ swipr_request_sample(FILE *output,
     swipr_os_dep_get_current_thread_name(old_thread_name, sizeof(old_thread_name));
     struct timespec current_time = swipr_sampler_get_current_time();
     struct swipr_minidump *minidumps = NULL;
+    char *stack_buf = NULL;
 
 #if !defined(__linux__) && !defined(__APPLE__)
     fprintf(output,
@@ -246,9 +263,12 @@ swipr_request_sample(FILE *output,
 #endif
 
     minidumps = calloc(SWIPR_MAX_MUTATOR_THREADS, sizeof(*minidumps));
-    if (!minidumps) {
+    stack_buf = malloc(SWIPR_STCK_BUF_SIZE);
+    if (!minidumps || !stack_buf) {
+        free(minidumps);
+        free(stack_buf);
         fprintf(output,
-                "[SWIPR] MESG { \"message\": \"ProfileRecorder could not allocate memory to collect minidumps.\", \"exit\": 1 }\n");
+                "[SWIPR] MESG { \"message\": \"ProfileRecorder could not allocate memory for sampling.\", \"exit\": 1 }\n");
         return 1;
     }
 
@@ -259,6 +279,7 @@ swipr_request_sample(FILE *output,
                 err);
         free(minidumps);
         minidumps = NULL;
+        free(stack_buf);
         return err;
     }
 
@@ -301,7 +322,7 @@ swipr_request_sample(FILE *output,
                     minidump->md_time.tv_nsec
                     );
 
-            swipr_write_stack(output, minidump);
+            swipr_write_stack(output, minidump, stack_buf);
 
             fprintf(output, "[SWIPR] DONE\n");
         }
@@ -312,6 +333,7 @@ swipr_request_sample(FILE *output,
 
     free(minidumps);
     minidumps = NULL;
+    free(stack_buf);
     return 0;
 }
 
