@@ -90,7 +90,7 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count) {
     pid_t my_tid = swipr_os_dep_get_thread_id();
     
     struct dirent *ent = NULL;
-    while (true) {
+    while (next_index < SWIPR_MAX_MUTATOR_THREADS) {
         errno = 0;
         ent = readdir(dir);
         if (ent == NULL) {
@@ -138,7 +138,9 @@ out:
     *all_threads_count = next_index;
     return all_threads;
 error:
-    closedir(dir);
+    if (dir) {
+        closedir(dir);
+    }
     swipr_os_dep_destroy_thread_list(all_threads);
     *all_threads_count = 0;
     return NULL;

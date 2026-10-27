@@ -39,7 +39,7 @@ swipr_os_dep_sem_create(int value) {
     }
 
     *sem = (typeof(*sem)){ 0 };
-    sem->value = 0;
+    sem->value = value;
 
     pthread_mutexattr_t attr;
     pthread_mutexattr_init(&attr);
@@ -70,10 +70,11 @@ swipr_os_dep_sem_signal(swipr_os_dep_sem sem) {
     swipr_precondition(sem->value >= 0);
     sem->value++;
 
-    err = pthread_mutex_unlock(&sem->mutex);
+    // Under the mutex: once it is released the waiter may return and free the semaphore.
+    err = pthread_cond_signal(&sem->cond);
     swipr_precondition(err == 0);
 
-    err = pthread_cond_signal(&sem->cond);
+    err = pthread_mutex_unlock(&sem->mutex);
     swipr_precondition(err == 0);
 }
 

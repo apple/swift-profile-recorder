@@ -16,7 +16,7 @@ import Benchmark
 import Dispatch
 import Foundation
 
-public struct ArrayAppend {
+public struct ArrayAppend: Sendable {
     var iterations: Int
     var blocking: Bool
     var threads: Int
