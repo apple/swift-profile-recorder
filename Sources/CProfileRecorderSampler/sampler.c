@@ -189,7 +189,7 @@ swipr_make_sample(struct swipr_minidump *minidumps,
 
     swipr_state_start_sampling();
     struct timespec start_time = swipr_sampler_get_current_time();
-    swipr_os_dep_sample_threads(num_threads, all_threads, minidumps, start_time);
+    swipr_os_dep_sample_threads(num_threads, all_threads, minidumps, start_time, mode);
     
     swipr_state_start_processing();
     swipr_state_finish_processing();

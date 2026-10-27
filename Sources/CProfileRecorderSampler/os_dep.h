@@ -36,6 +36,7 @@ struct thread_info;
 #include "sampler.h"
 #include "CSampler.h"
 
+// In SWIPR_SAMPLING_CPU mode, Darwin drops threads already not running, saving their thread_info calls.
 struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, enum swipr_sampling_mode mode);
 
 int swipr_os_dep_destroy_thread_list(struct thread_info *thread_list);
@@ -67,8 +68,9 @@ bool swipr_os_dep_copy_memory(void *dst, uintptr_t src, size_t len);
 
 int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps);
 // Stops, unwinds into `minidumps` and releases each thread before stopping the next.
+// In SWIPR_SAMPLING_CPU mode, skips threads not running when about to be stopped.
 void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
-                                 struct timespec start_time);
+                                 struct timespec start_time, enum swipr_sampling_mode mode);
 int swipr_os_dep_sample_cleanup(size_t num_threads, struct thread_info *all_threads);
 
 #endif /* swipr_os_dep_h */

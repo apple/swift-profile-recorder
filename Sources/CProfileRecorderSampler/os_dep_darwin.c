@@ -25,6 +25,36 @@
 #include "os_dep.h"
 #include "asserts.h"
 
+// Fills `info` for a thread to sample; false for threads to skip. In CPU mode, threads already not running are skipped.
+// O(1) kernel lookups; pthread_from_mach_thread_np and pthread_getname_np walk all threads, O(n) each.
+static bool swipr_read_info_of_thread_to_sample(thread_t thread, enum swipr_sampling_mode mode, struct thread_info *info) {
+    thread_extended_info_data_t extended_info;
+    mach_msg_type_number_t extended_info_count = THREAD_EXTENDED_INFO_COUNT;
+    if (thread_info(thread, THREAD_EXTENDED_INFO, (thread_info_t)&extended_info, &extended_info_count) != KERN_SUCCESS) {
+        return false;
+    }
+    // Rechecked right before thread_suspend; skipping already idle threads here saves their next thread_info call.
+    if (mode == SWIPR_SAMPLING_CPU && extended_info.pth_run_state != TH_STATE_RUNNING) {
+        return false;
+    }
+    thread_identifier_info_data_t identifier_info;
+    mach_msg_type_number_t identifier_info_count = THREAD_IDENTIFIER_INFO_COUNT;
+    if (thread_info(thread, THREAD_IDENTIFIER_INFO, (thread_info_t)&identifier_info, &identifier_info_count) != KERN_SUCCESS) {
+        return false;
+    }
+    if (identifier_info.thread_handle == 0) {
+        return false; // a mach thread without a pthread
+    }
+    info->ti_id = identifier_info.thread_id;
+    info->ti_os_specific.mach_thread = thread;
+    if (extended_info.pth_name[0] == 0) {
+        strcpy(info->ti_name, "<n/a>"); // threads may have empty names
+    } else {
+        strlcpy(info->ti_name, extended_info.pth_name, sizeof(info->ti_name));
+    }
+    return true;
+}
+
 struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, enum swipr_sampling_mode mode) {
     // Allocated first: task_threads hands out a port right per thread, which a later failure would leak.
     struct thread_info *all_threads = calloc(SWIPR_MAX_MUTATOR_THREADS, sizeof(struct thread_info));
@@ -49,32 +79,15 @@ struct thread_info *swipr_os_dep_create_thread_list(size_t *all_threads_count, e
     size_t next_index = 0;
     for (mach_msg_type_number_t i = 0; i < threads_count; i++) {
         thread_t thread = threads[i];
-        // O(1) kernel lookups; pthread_from_mach_thread_np and pthread_getname_np walk all threads, O(n) each.
-        thread_extended_info_data_t ext_info;
-        mach_msg_type_number_t ext_count = THREAD_EXTENDED_INFO_COUNT;
-        thread_identifier_info_data_t tid_info;
-        mach_msg_type_number_t tid_count = THREAD_IDENTIFIER_INFO_COUNT;
-        bool keep = thread != controller
+        bool sample = thread != controller
             && next_index < SWIPR_MAX_MUTATOR_THREADS
-            && thread_info(thread, THREAD_EXTENDED_INFO, (thread_info_t)&ext_info, &ext_count) == KERN_SUCCESS
-            // Must be read before thread_suspend, which makes every thread report TH_STATE_WAITING.
-            && (mode != SWIPR_SAMPLING_CPU || ext_info.pth_run_state == TH_STATE_RUNNING)
-            && thread_info(thread, THREAD_IDENTIFIER_INFO, (thread_info_t)&tid_info, &tid_count) == KERN_SUCCESS
-            && tid_info.thread_handle != 0; // mach threads without a pthread
-        if (!keep) {
+            && swipr_read_info_of_thread_to_sample(thread, mode, &all_threads[next_index]);
+        if (!sample) {
             kret = mach_port_deallocate(mach_task_self(), thread);
             swipr_precondition(kret == KERN_SUCCESS);
             continue;
         }
-
-        struct thread_info *info = &all_threads[next_index++];
-        info->ti_id = tid_info.thread_id;
-        info->ti_os_specific.mach_thread = thread;
-        if (ext_info.pth_name[0] == 0) {
-            strcpy(info->ti_name, "<n/a>"); // threads may have empty names
-        } else {
-            strlcpy(info->ti_name, ext_info.pth_name, sizeof(info->ti_name));
-        }
+        next_index++;
     }
     kret = mach_port_deallocate(mach_task_self(), controller);
     swipr_precondition(kret == KERN_SUCCESS);
@@ -272,10 +285,10 @@ int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_thre
 }
 
 void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
-                                 struct timespec start_time) {
+                                 struct timespec start_time, enum swipr_sampling_mode mode) {
 #if TARGET_OS_OSX || TARGET_OS_IOS
     // For Darwin - controller thread suspends and resumes each mutator
-    // We ignore thread iff ti_id == 0
+    // Threads with ti_id == 0 are ignored, and in CPU mode so are threads not running when about to be suspended.
     
     for (mach_msg_type_number_t i=0; i<num_threads; i++) {
         // ignore and mark unwanted threads
@@ -288,6 +301,11 @@ void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_thr
         if (thread_info(all_threads[i].ti_os_specific.mach_thread, THREAD_EXTENDED_INFO, (thread_info_t)&info, &info_count)
             != KERN_SUCCESS) {
             all_threads[i].ti_id = 0;
+            continue;
+        }
+        // Read right before thread_suspend, which makes every thread report TH_STATE_WAITING; an earlier read goes stale
+        // for threads that run in short bursts.
+        if (mode == SWIPR_SAMPLING_CPU && info.pth_run_state != TH_STATE_RUNNING) {
             continue;
         }
         uint64_t cpu_ns = info.pth_user_time + info.pth_system_time;

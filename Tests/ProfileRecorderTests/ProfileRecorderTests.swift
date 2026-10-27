@@ -507,6 +507,71 @@ final class ProfileRecorderTests: XCTestCase {
         XCTAssertLessThan(cpuSamples, wallSamples / 4, "the 32 idle threads are skipped")
     }
 
+    func testCPUModeSamplesBurstyThreadsWhileTheySpin() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let symbolizer = ProfileRecorderSampler._makeDefaultSymbolizer()
+        try await NIOThreadPool.singleton.runIfActive { try symbolizer.start() }
+        defer {
+            XCTAssertNoThrow(try symbolizer.shutdown())
+        }
+        let threadCount = 4
+        let ticks = 200
+        // Burst threads alternate a spin of `work` and a sleep of `sleep` microseconds; idle threads lengthen
+        // the thread list, so a state read taken while listing goes stale before the thread is sampled.
+        for (work, sleep, idle) in [(200, 50, 0), (200, 50, 500), (2_000, 500, 500)] {
+            let idleThreads = NIOThreadPool(numberOfThreads: idle)
+            idleThreads.start()
+            defer {
+                XCTAssertNoThrow(try idleThreads.syncShutdownGracefully())
+            }
+            let keepRunning = ManagedAtomic<Bool>(true)
+            defer {
+                keepRunning.store(false, ordering: .relaxed)
+            }
+            let stopped = ManagedAtomic<Int>(0)
+            for _ in 0..<threadCount {
+                Thread.detachNewThread {
+                    Thread.current.name = "swipr-burst"
+                    while keepRunning.load(ordering: .relaxed) {
+                        SWIPR_BURST_SPIN(microseconds: work)
+                        usleep(UInt32(sleep))
+                    }
+                    stopped.wrappingIncrement(ordering: .relaxed)
+                }
+            }
+
+            let samples = try await ProfileRecorderSampler.sharedInstance._withSamples(
+                sampleCount: ticks,
+                timeBetweenSamples: .milliseconds(1),
+                mode: .cpu,
+                format: .perfSymbolized,
+                symbolizer: symbolizer,
+                logger: self.logger
+            ) { file in
+                String(buffer: try await ByteBuffer(contentsOf: FilePath(file), maximumSizeAllowed: .mebibytes(64)))
+            }
+            keepRunning.store(false, ordering: .relaxed)
+            while stopped.load(ordering: .relaxed) < threadCount {
+                try await Task.sleep(nanoseconds: 1_000_000)
+            }
+
+            let burstSamples = samples.components(separatedBy: "\n\n").filter { $0.hasPrefix("swipr-burst") }
+            let spinning = burstSamples.filter { $0.contains("SWIPR_BURST_SPIN") }.count
+            let spinningShare = Double(spinning) / Double(max(burstSamples.count, 1))
+            XCTAssertGreaterThan(burstSamples.count, 0, "\(work)us work / \(sleep)us sleep, \(idle) idle threads")
+            // Scheduling-dependent: a thread seen running can enter usleep before it is stopped. Measured 0.94-0.97, and
+            // 0.71 once under load; the state read at listing time scored 0.80-0.83.
+            XCTAssertGreaterThan(
+                spinningShare,
+                0.6,
+                "\(work)us work / \(sleep)us sleep, \(idle) idle threads: \(spinning) of \(burstSamples.count) spinning"
+            )
+        }
+    }
+
     // Experiencing issues due to the lack of frame pointers
     // (https://github.com/swiftlang/swift-corelibs-libdispatch/issues/909)
     func testSymbolicatedSamplesWork() async throws {
