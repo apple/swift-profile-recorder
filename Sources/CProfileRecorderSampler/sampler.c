@@ -347,6 +347,7 @@ swipr_request_sample(FILE *output,
             fprintf(output, "[SWIPR] DONE\n");
         }
         UNSAFE_DEBUG("done sample %lu\n", sample_no);
+        fflush(output);
         usleep(usecs_between_samples);
     }
     swipr_os_dep_set_current_thread_name(old_thread_name);
