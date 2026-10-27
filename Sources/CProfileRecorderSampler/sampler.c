@@ -198,24 +198,30 @@ swipr_make_sample(struct swipr_minidump *minidumps,
     return err;
 }
 
-#define SWIPR_STCK_IP "[SWIPR] STCK {\"ip\": \"0x"
-#define SWIPR_STCK_SP "\", \"sp\": \"0x"
-#define SWIPR_STCK_END "\"}\n"
-#define SWIPR_STCK_LINE_MAX (sizeof(SWIPR_STCK_IP SWIPR_STCK_SP SWIPR_STCK_END) - 1 + 4 * sizeof(uintptr_t))
-// Each fwrite stays within PIPE_BUF and ends at a line end, so on unbuffered stderr each write(2) of lines is atomic on a pipe.
-#define SWIPR_STCK_BUF_SIZE PIPE_BUF
-_Static_assert(SWIPR_STCK_BUF_SIZE >= SWIPR_STCK_LINE_MAX, "a stack line must fit in one write");
-
+#define SWIPR_STACK_JSON_PRE_IP "[SWIPR] STCK {\"ip\": \"0x"
+#define SWIPR_STACK_JSON_PRE_SP "\", \"sp\": \"0x"
+#define SWIPR_STACK_JSON_END "\"}\n"
+// `"" s` rejects a pointer variable, so `sizeof` is the literal's size.
+#define SWIPR_LIT_LENGTH_WITHOUT_NUL(s) (sizeof("" s) - 1)
 #define SWIPR_HEX_MAX (2 * sizeof(uintptr_t))
+enum {
+    SWIPR_STACK_JSON_MAX = SWIPR_LIT_LENGTH_WITHOUT_NUL(SWIPR_STACK_JSON_PRE_IP)
+        + SWIPR_LIT_LENGTH_WITHOUT_NUL(SWIPR_STACK_JSON_PRE_SP)
+        + SWIPR_LIT_LENGTH_WITHOUT_NUL(SWIPR_STACK_JSON_END)
+        + 2 * SWIPR_HEX_MAX
+};
+_Static_assert(sizeof(uintptr_t) != 8 || SWIPR_STACK_JSON_MAX == 70, "unexpected stack line size");
 _Static_assert(sizeof(uintptr_t) == sizeof(unsigned long), "__builtin_clzl must count uintptr_t bits");
+// Each fwrite stays within PIPE_BUF and ends at a line end, so on unbuffered stderr each write(2) of lines is atomic on a pipe.
+#define SWIPR_STACK_BUF_SIZE PIPE_BUF
+_Static_assert(SWIPR_STACK_BUF_SIZE >= SWIPR_STACK_JSON_MAX, "a stack line must fit in one write");
 
-// `"" str` rejects a pointer variable, so `sizeof` is the literal's size.
-#define SWIPR_APPEND_LITERAL(line, len, str) \
-    (memcpy((line) + (len), (str), sizeof("" str) - 1), (len) += sizeof("" str) - 1)
+#define SWIPR_PUT_LITERAL(out, len, s) \
+    (memcpy((out) + (len), (s), SWIPR_LIT_LENGTH_WITHOUT_NUL(s)), (len) += SWIPR_LIT_LENGTH_WITHOUT_NUL(s))
 
 // Same digits as printf's %lx. Returns: the number of chars written.
 static size_t
-swipr_write_hex(char *__counted_by(SWIPR_HEX_MAX) out, uintptr_t value) {
+swipr_put_hex(char *__counted_by(SWIPR_HEX_MAX) out, uintptr_t value) {
     size_t n = (8 * sizeof(value) - __builtin_clzl(value | 1) + 3) / 4;
     for (size_t i = n; i > 0; i--) {
         out[i - 1] = "0123456789abcdef"[value & 0xf];
@@ -224,30 +230,30 @@ swipr_write_hex(char *__counted_by(SWIPR_HEX_MAX) out, uintptr_t value) {
     return n;
 }
 
-// Every piece has a compile-time maximum; a new piece must be added to SWIPR_STCK_LINE_MAX.
+// Every piece has a compile-time maximum; a new piece must be added to SWIPR_STACK_JSON_MAX. Writes no NUL.
 static size_t
-swipr_format_stack_line(char *__counted_by(SWIPR_STCK_LINE_MAX) line, uintptr_t ip, uintptr_t sp) {
+swipr_write_stack_json(char *__counted_by(SWIPR_STACK_JSON_MAX) out, uintptr_t ip, uintptr_t sp) {
     size_t len = 0;
-    SWIPR_APPEND_LITERAL(line, len, SWIPR_STCK_IP);
-    len += swipr_write_hex(line + len, ip);
-    SWIPR_APPEND_LITERAL(line, len, SWIPR_STCK_SP);
-    len += swipr_write_hex(line + len, sp);
-    SWIPR_APPEND_LITERAL(line, len, SWIPR_STCK_END);
+    SWIPR_PUT_LITERAL(out, len, SWIPR_STACK_JSON_PRE_IP);
+    len += swipr_put_hex(out + len, ip);
+    SWIPR_PUT_LITERAL(out, len, SWIPR_STACK_JSON_PRE_SP);
+    len += swipr_put_hex(out + len, sp);
+    SWIPR_PUT_LITERAL(out, len, SWIPR_STACK_JSON_END);
     return len;
 }
 
 // printf's formatter dominated the sampler's time with deep stacks on macOS, so the hex is written by hand.
 static void
 swipr_write_stack(FILE *output, const struct swipr_minidump *minidump, char *__counted_by(buf_size) buf, size_t buf_size) {
-    swipr_precondition(buf_size >= SWIPR_STCK_LINE_MAX);
+    swipr_precondition(buf_size >= SWIPR_STACK_JSON_MAX);
     size_t pos = 0;
     for (size_t s=0; s<minidump->md_stack_depth; s++) {
-        if (buf_size - pos < SWIPR_STCK_LINE_MAX) {
+        if (buf_size - pos < SWIPR_STACK_JSON_MAX) {
             fwrite(buf, 1, pos, output);
             pos = 0;
         }
-        size_t len = swipr_format_stack_line(buf + pos, minidump->md_stack[s].sf_ip, minidump->md_stack[s].sf_sp);
-        swipr_precondition(len <= SWIPR_STCK_LINE_MAX);
+        size_t len = swipr_write_stack_json(buf + pos, minidump->md_stack[s].sf_ip, minidump->md_stack[s].sf_sp);
+        swipr_precondition(len <= SWIPR_STACK_JSON_MAX);
         pos += len;
     }
     fwrite(buf, 1, pos, output);
@@ -271,7 +277,7 @@ swipr_request_sample(FILE *output,
 #endif
 
     minidumps = calloc(SWIPR_MAX_MUTATOR_THREADS, sizeof(*minidumps));
-    stack_buf = malloc(SWIPR_STCK_BUF_SIZE);
+    stack_buf = malloc(SWIPR_STACK_BUF_SIZE);
     if (!minidumps || !stack_buf) {
         free(minidumps);
         free(stack_buf);
@@ -330,7 +336,7 @@ swipr_request_sample(FILE *output,
                     minidump->md_time.tv_nsec
                     );
 
-            swipr_write_stack(output, minidump, stack_buf, SWIPR_STCK_BUF_SIZE);
+            swipr_write_stack(output, minidump, stack_buf, SWIPR_STACK_BUF_SIZE);
 
             fprintf(output, "[SWIPR] DONE\n");
         }
