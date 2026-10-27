@@ -46,7 +46,7 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         let samplesID = stringTable.addAndGetID("samples", type: StringWithID.self)
         let countID = stringTable.addAndGetID("count", type: StringWithID.self)
         let periodTypeID = stringTable.addAndGetID(
-            (sampleConfiguration.mode ?? .wall).rawValue,
+            (sampleConfiguration.mode ?? .wallTime).name,
             type: StringWithID.self
         )
         let nanosecondsID = stringTable.addAndGetID("nanoseconds", type: StringWithID.self)

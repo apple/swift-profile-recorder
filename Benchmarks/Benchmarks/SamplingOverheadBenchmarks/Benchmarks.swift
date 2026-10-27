@@ -106,7 +106,7 @@ private func spawnThreads(idle: Int, busy: Int) {
 }
 
 // A regular file as in real use: /dev/null gets a larger stdio buffer and hides the cost of writes.
-private func sample(_ ticks: Int, everyMilliseconds interval: Int64) async throws {
+private func sample(_ ticks: Int, everyMilliseconds interval: Int64, mode: ProfileRecorderSamplingMode) async throws {
     let path = FileManager.default.temporaryDirectory.appendingPathComponent("swipr-bench-\(UUID()).raw").path
     defer {
         try? FileManager.default.removeItem(atPath: path)
@@ -114,7 +114,8 @@ private func sample(_ ticks: Int, everyMilliseconds interval: Int64) async throw
     try await ProfileRecorderSampler.sharedInstance.requestSamples(
         outputFilePath: path,
         count: ticks,
-        timeBetweenSamples: .milliseconds(interval)
+        timeBetweenSamples: .milliseconds(interval),
+        mode: mode
     )
 }
 
@@ -156,28 +157,30 @@ let benchmarks: @Sendable () -> Void = {
     // The tool runs each benchmark in its own process, sorted by name, hence the zero padding.
     for threads in threadCounts {
         let busy = busyThreads(of: threads)
-        let label = "\(String(format: "%04d", threads)) threads (\(busy) busy)"
+        for mode in [ProfileRecorderSamplingMode.wallTime, .cpuTime] {
+            let label = "\(mode) \(String(format: "%04d", threads)) threads (\(busy) busy)"
 
-        // Back-to-back ticks; wall time includes per-request setup (file open, image map) spread over the ticks.
-        Benchmark(
-            "cost: \(label)",
-            configuration: .init(
-                metrics: [samplerTimePerTick],
-                setup: { spawnThreads(idle: threads - busy, busy: busy) }
-            )
-        ) { benchmark in
-            // 11 at 900 threads keeps an iteration near 0.3 s, so maxDuration still allows ~15 iterations.
-            let ticks = min(100, 10_000 / threads)
-            for _ in benchmark.scaledIterations {
-                let start = DispatchTime.now().uptimeNanoseconds
-                try await sample(ticks, everyMilliseconds: 0)
-                let elapsed = Int(DispatchTime.now().uptimeNanoseconds - start)
-                benchmark.measurement(samplerTimePerTick, elapsed / ticks / 1_000)
+            // Back-to-back ticks; wall time includes per-request setup (file open, image map) spread over the ticks.
+            Benchmark(
+                "cost: \(label)",
+                configuration: .init(
+                    metrics: [samplerTimePerTick],
+                    setup: { spawnThreads(idle: threads - busy, busy: busy) }
+                )
+            ) { benchmark in
+                // 11 at 900 threads keeps an iteration near 0.3 s, so maxDuration still allows ~15 iterations.
+                let ticks = min(100, 10_000 / threads)
+                for _ in benchmark.scaledIterations {
+                    let start = DispatchTime.now().uptimeNanoseconds
+                    try await sample(ticks, everyMilliseconds: 0, mode: mode)
+                    let elapsed = Int(DispatchTime.now().uptimeNanoseconds - start)
+                    benchmark.measurement(samplerTimePerTick, elapsed / ticks / 1_000)
+                }
             }
-        }
 
-        pauseBenchmark("pause at 100 Hz: \(label)", idle: threads - busy, busy: busy) {
-            try await sample(pauseTicks, everyMilliseconds: 10)
+            pauseBenchmark("pause at 100 Hz: \(label)", idle: threads - busy, busy: busy) {
+                try await sample(pauseTicks, everyMilliseconds: 10, mode: mode)
+            }
         }
     }
 

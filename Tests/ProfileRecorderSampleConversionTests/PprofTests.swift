@@ -102,7 +102,7 @@ final class PprofTests: XCTestCase {
     }
 
     func testPprofPeriodTypeFollowsSamplingMode() throws {
-        let cases: [(ProfileRecorderSamplingMode?, String)] = [(nil, "wall"), (.wall, "wall"), (.cpu, "cpu")]
+        let cases: [(ProfileRecorderSamplingMode?, String)] = [(nil, "wall"), (.wallTime, "wall"), (.cpuTime, "cpu")]
         for (mode, expected) in cases {
             var renderer = PprofOutputRenderer()
             let output = try renderer.finalise(

@@ -295,7 +295,8 @@ final class ProfileRecorderTests: XCTestCase {
                 outputFilePath: "\(self.tempDirectory!)/long-run.samples",
                 failIfFileExists: false,
                 count: 50 + requests % 150,
-                timeBetweenSamples: .microseconds(Int64(requests % 3) * 500)
+                timeBetweenSamples: .microseconds(Int64(requests % 3) * 500),
+                mode: requests % 2 == 0 ? .wallTime : .cpuTime
             )
             longest = max(longest, DispatchTime.now().uptimeNanoseconds - start)
             requests += 1
@@ -486,7 +487,7 @@ final class ProfileRecorderTests: XCTestCase {
         }
 
         func sampleLines(mode: ProfileRecorderSamplingMode) async throws -> [Substring] {
-            let path = "\(self.tempDirectory!)/samples-\(mode.rawValue).samples"
+            let path = "\(self.tempDirectory!)/samples-\(mode.name).samples"
             try await ProfileRecorderSampler.sharedInstance.requestSamples(
                 outputFilePath: path,
                 count: 20,
@@ -497,8 +498,8 @@ final class ProfileRecorderTests: XCTestCase {
             return String(buffer: data).split(separator: "\n")
         }
 
-        let wall = try await sampleLines(mode: .wall)
-        let cpu = try await sampleLines(mode: .cpu)
+        let wall = try await sampleLines(mode: .wallTime)
+        let cpu = try await sampleLines(mode: .cpuTime)
         XCTAssertTrue(cpu.contains { $0.hasPrefix("[SWIPR] CONF") && $0.contains(#""mode": "cpu""#) })
         let wallSamples = wall.filter { $0.hasPrefix("[SWIPR] SMPL") }.count
         let cpuSamples = cpu.filter { $0.hasPrefix("[SWIPR] SMPL") }.count
@@ -546,7 +547,7 @@ final class ProfileRecorderTests: XCTestCase {
             let samples = try await ProfileRecorderSampler.sharedInstance._withSamples(
                 sampleCount: ticks,
                 timeBetweenSamples: .milliseconds(1),
-                mode: .cpu,
+                mode: .cpuTime,
                 format: .perfSymbolized,
                 symbolizer: symbolizer,
                 logger: self.logger

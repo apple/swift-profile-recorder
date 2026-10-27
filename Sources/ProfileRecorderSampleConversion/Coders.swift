@@ -46,7 +46,7 @@ public struct SampleConfig: Codable & Hashable & Sendable {
     public var currentTimeNanoseconds: Int
     public var microSecondsBetweenSamples: Int
     public var sampleCount: Int
-    /// `nil` for raw files written before the mode was recorded, which were all `.wall`.
+    /// `nil` for raw files written before the mode was recorded, which were all `.wallTime`.
     public var mode: ProfileRecorderSamplingMode?
 }
 

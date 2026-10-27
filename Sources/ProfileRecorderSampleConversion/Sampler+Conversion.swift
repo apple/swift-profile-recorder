@@ -29,7 +29,7 @@ extension ProfileRecorderSampler {
     public func _withSamples<R: Sendable>(
         sampleCount: Int,
         timeBetweenSamples: TimeAmount,
-        mode: ProfileRecorderSamplingMode = .wall,
+        mode: ProfileRecorderSamplingMode = .wallTime,
         format: ProfileRecorderOutputFormat,
         symbolizer: any Symbolizer,
         logger: Logger,
@@ -50,7 +50,7 @@ extension ProfileRecorderSampler {
     public func _withSamples<R: Sendable>(
         sampleCount: Int,
         timeBetweenSamples: TimeAmount,
-        mode: ProfileRecorderSamplingMode = .wall,
+        mode: ProfileRecorderSamplingMode = .wallTime,
         format: ProfileRecorderOutputFormat,
         symbolizer: any Symbolizer,
         demangle: Bool,
@@ -68,7 +68,7 @@ extension ProfileRecorderSampler {
             logger[metadataKey: "time-between-samples"] = "\(timeBetweenSamples.prettyPrint)"
             logger[metadataKey: "raw-samples-path"] = "\(rawSamplesPath)"
             logger[metadataKey: "symbolizer"] = "\(symbolizer)"
-            logger[metadataKey: "mode"] = "\(mode.rawValue)"
+            logger[metadataKey: "mode"] = "\(mode.name)"
             switch format {
             case .perfSymbolized:
                 symbolisedSamplesPath = tmpDirPath.appending("samples.perf")

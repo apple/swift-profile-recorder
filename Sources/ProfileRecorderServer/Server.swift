@@ -646,8 +646,8 @@ public struct ProfileRecorderServer: Sendable {
                 let numberOfSamples = seconds * sampleRate
                 let timeIntervalBetweenSamplesMS = (1000 / sampleRate).clamping(to: 1...100_000)
                 let mode =
-                    decodedURI.queryParams["mode"].flatMap { $0 }.flatMap(ProfileRecorderSamplingMode.init(rawValue:))
-                    ?? .wall
+                    decodedURI.queryParams["mode"].flatMap { $0 }.flatMap(ProfileRecorderSamplingMode.init(name:))
+                    ?? .wallTime
 
                 sampleRequest = SampleRequest(
                     numberOfSamples: numberOfSamples,
@@ -780,7 +780,7 @@ struct SampleRequest: Sendable & Codable {
         format: SampleFormat,
         symbolizer: ProfileRecorderSymbolizerKind,
         demangle: Bool,
-        mode: ProfileRecorderSamplingMode = .wall
+        mode: ProfileRecorderSamplingMode = .wallTime
     ) {
         self.numberOfSamples = numberOfSamples
         self.timeInterval = timeInterval
@@ -802,7 +802,7 @@ struct SampleRequest: Sendable & Codable {
         self.symbolizer =
             try container.decodeIfPresent(ProfileRecorderSymbolizerKind.self, forKey: .symbolizer) ?? .native
         self.demangle = try container.decodeIfPresent(Bool.self, forKey: .demangle) ?? false
-        self.mode = try container.decodeIfPresent(ProfileRecorderSamplingMode.self, forKey: .mode) ?? .wall
+        self.mode = try container.decodeIfPresent(ProfileRecorderSamplingMode.self, forKey: .mode) ?? .wallTime
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -821,7 +821,7 @@ struct SampleRequest: Sendable & Codable {
         if self.demangle {
             try container.encode(self.demangle, forKey: .demangle)
         }
-        if self.mode != .wall {
+        if self.mode != .wallTime {
             try container.encode(self.mode, forKey: .mode)
         }
     }

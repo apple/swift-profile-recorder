@@ -33,12 +33,67 @@ private let globalProfileRecorder: ProfileRecorderSampler = {
 }()
 
 /// Which threads the sampler records.
-public enum ProfileRecorderSamplingMode: String, Codable & Sendable {
-    /// All threads, running or waiting (on- and off-CPU).
-    case wall
-    /// Only threads running or runnable when sampled (on-CPU).
-    case cpu
+public struct ProfileRecorderSamplingMode: Codable & Hashable & Sendable & CustomStringConvertible {
+    // Raw values are the wire names: raw file CONF line, `mode` query parameter, pprof period type.
+    internal enum SupportedSamplingMode: String, Hashable & Sendable {
+        case wallTime = "wall"
+        case cpuTime = "cpu"
+    }
+
+    internal let supportedSamplingMode: SupportedSamplingMode
+
+    /// All threads, running or waiting.
+    public static let wallTime = Self(.wallTime)
+    /// Only threads the scheduler reports as running or runnable just before each is sampled.
+    public static let cpuTime = Self(.cpuTime)
+
+    private init(_ supportedSamplingMode: SupportedSamplingMode) {
+        self.supportedSamplingMode = supportedSamplingMode
+    }
+
+    package init?(name: String) {
+        guard let supportedSamplingMode = SupportedSamplingMode(rawValue: name) else {
+            return nil
+        }
+        self.supportedSamplingMode = supportedSamplingMode
+    }
+
+    package var name: String {
+        self.supportedSamplingMode.rawValue
+    }
+
+    public var description: String {
+        self.name
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let name = try container.decode(String.self)
+        guard let mode = Self(name: name) else {
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "unknown sampling mode '\(name)'"
+            )
+        }
+        self = mode
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(self.name)
+    }
 }
+
+#if canImport(CProfileRecorderSampler) // only on macOS & Linux
+extension ProfileRecorderSamplingMode {
+    fileprivate var swiprSamplingMode: swipr_sampling_mode {
+        switch self.supportedSamplingMode {
+        case .wallTime: SWIPR_SAMPLING_WALL
+        case .cpuTime: SWIPR_SAMPLING_CPU
+        }
+    }
+}
+#endif
 
 struct CouldNotOpenFileError: Error {
     var path: String
@@ -83,16 +138,11 @@ public final class ProfileRecorderSampler: Sendable {
     ) -> EventLoopFuture<Void> {
         #if canImport(CProfileRecorderSampler) // only on macOS & Linux
         return self.threadPool.runIfActive(eventLoop: eventLoop) {
-            let cMode: swipr_sampling_mode =
-                switch mode {
-                case .wall: SWIPR_SAMPLING_WALL
-                case .cpu: SWIPR_SAMPLING_CPU
-                }
             let ret = swipr_request_sample(
                 output.handle,
                 .init(count),
                 .init(timeBetweenSamples.nanoseconds / 1000),
-                cMode
+                mode.swiprSamplingMode
             )
             fflush(output.handle)
             guard ret == 0 else {
@@ -122,7 +172,7 @@ public final class ProfileRecorderSampler: Sendable {
         failIfFileExists: Bool = true,
         count: Int,
         timeBetweenSamples: TimeAmount,
-        mode: ProfileRecorderSamplingMode = .wall,
+        mode: ProfileRecorderSamplingMode = .wallTime,
         queue: DispatchQueue,
         _ handler: @Sendable @escaping (Result<String, Error>) -> Void
     ) {
@@ -157,7 +207,7 @@ public final class ProfileRecorderSampler: Sendable {
         failIfFileExists: Bool = true,
         count: Int,
         timeBetweenSamples: TimeAmount,
-        mode: ProfileRecorderSamplingMode = .wall,
+        mode: ProfileRecorderSamplingMode = .wallTime,
         eventLoop: EventLoop
     ) -> EventLoopFuture<Void> {
         if outputFilePath == "-" {
@@ -208,7 +258,7 @@ public final class ProfileRecorderSampler: Sendable {
         failIfFileExists: Bool = true,
         count: Int,
         timeBetweenSamples: TimeAmount,
-        mode: ProfileRecorderSamplingMode = .wall
+        mode: ProfileRecorderSamplingMode = .wallTime
     ) async throws {
         return try await self.requestSamples(
             outputFilePath: outputFilePath,
