@@ -817,7 +817,16 @@ func SWIPR_DEEP_STACK(_ depth: Int, _ body: () -> Void) -> UInt8 {
 @inline(never)
 func SWIPR_BURST_SPIN(microseconds: Int) {
     let end = DispatchTime.now().uptimeNanoseconds + UInt64(microseconds) * 1_000
-    while DispatchTime.now().uptimeNanoseconds < end {}
+    // No calls in the loop: on x86_64 a sample in a frameless callee unwinds past this function.
+    var sum = 0
+    repeat {
+        var i = 0
+        while i < 10_000 {
+            sum &+= i
+            i &+= 1
+        }
+    } while DispatchTime.now().uptimeNanoseconds < end
+    withExtendedLifetime(sum) {}
 }
 
 @inline(never)
