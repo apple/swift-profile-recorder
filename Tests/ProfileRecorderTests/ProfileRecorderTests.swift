@@ -126,7 +126,7 @@ final class ProfileRecorderTests: XCTestCase {
         let state = ConditionLock(value: 0)
         for i in 0..<threadCount {
             Thread {
-                Thread.current.name = "swipr-idle-\(i)"
+                setCurrentThreadName("swipr-idle-\(i)")
                 state.lock(whenValue: i)
                 state.unlock(withValue: i + 1)
                 state.lock(whenValue: -1)
@@ -262,7 +262,7 @@ final class ProfileRecorderTests: XCTestCase {
                 var round = 0
                 while keepRunning.load(ordering: .relaxed) {
                     round += 1
-                    Thread.current.name = "swipr-run-\(index)-\(round % 3)"
+                    setCurrentThreadName("swipr-run-\(index)-\(round % 3)")
                     _ = SWIPR_DEEP_STACK(20 + (index * 7 + round) % 200) {
                         SWIPR_BURST_SPIN(microseconds: 200)
                         usleep(UInt32(100 + round % 500))
@@ -320,7 +320,7 @@ final class ProfileRecorderTests: XCTestCase {
         for _ in 0..<threadCount {
             // 2000 frames of ~300 bytes: far past the unwinder's 128 frame and 128 KiB limits, across many pages.
             let thread = Thread {
-                Thread.current.name = "swipr-deep"
+                setCurrentThreadName("swipr-deep")
                 _ = SWIPR_DEEP_STACK(2000) {
                     ready.wrappingIncrement(ordering: .relaxed)
                     release.lock(whenValue: 1)
@@ -420,14 +420,16 @@ final class ProfileRecorderTests: XCTestCase {
             stage.unlock(withValue: 2)
         }
         Thread.detachNewThread {
-            Thread.current.name = "swipr-mover"
+            setCurrentThreadName("swipr-mover")
             SWIPR_WAIT_A(stage)
             SWIPR_WAIT_B(stage)
         }
 
         let path = "\(self.tempDirectory!)/samples.samples"
         func moverStacks() throws -> [[Substring]] {
-            let text = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+            // String(contentsOfFile:) on Linux can trap reading a file the sampler is still appending to.
+            let data = FileHandle(forReadingAtPath: path)?.readDataToEndOfFile() ?? Data()
+            let text = String(decoding: data, as: UTF8.self)
             var stacks: [[Substring]] = []
             var current: [Substring]? = nil
             for line in text.split(separator: "\n") {
@@ -535,7 +537,7 @@ final class ProfileRecorderTests: XCTestCase {
             let stopped = ManagedAtomic<Int>(0)
             for _ in 0..<threadCount {
                 Thread.detachNewThread {
-                    Thread.current.name = "swipr-burst"
+                    setCurrentThreadName("swipr-burst")
                     while keepRunning.load(ordering: .relaxed) {
                         SWIPR_BURST_SPIN(microseconds: work)
                         usleep(UInt32(sleep))
@@ -839,4 +841,9 @@ func SWIPR_WAIT_A(_ stage: ConditionLock<Int>) {
 func SWIPR_WAIT_B(_ stage: ConditionLock<Int>) {
     stage.lock(whenValue: 2)
     stage.unlock()
+}
+
+// corelibs Foundation drops a `Thread.current.name` set before `Thread.start()` has stored the new pthread.
+func setCurrentThreadName(_ name: String) {
+    repeat { Thread.current.name = name } while Thread.current.name != name
 }
