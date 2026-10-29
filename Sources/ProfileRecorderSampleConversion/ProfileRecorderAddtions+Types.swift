@@ -23,26 +23,32 @@ public struct SourceLocation: CustomStringConvertible, Sendable, Hashable {
     public var path: String
 
     /// The line number.
-    public var line: Int { self.lineRange?.lowerBound ?? 0 }
+    public var line: Int {
+        get { self.lineRange?.lowerBound ?? 0 }
+        set { self.lineRange = Self.singleValueRange(newValue) }
+    }
 
     /// The column number.
-    public var column: Int { self.columnRange?.lowerBound ?? 0 }
+    public var column: Int {
+        get { self.columnRange?.lowerBound ?? 0 }
+        set { self.columnRange = Self.singleValueRange(newValue) }
+    }
 
     /// The line range.
-    public var lineRange: Range<Int>?
+    var lineRange: Range<Int>?
 
     /// The column range.
-    public var columnRange: Range<Int>?
+    var columnRange: Range<Int>?
 
     /// Construct a SourceLocation with a single line/column
-    public init(path: String, line: Int, column: Int = 0) {
+    init(path: String, line: Int, column: Int = 0) {
         self.path = path
-        self.lineRange = line > 0 ? line..<line : nil
-        self.columnRange = column > 0 ? column..<column : nil
+        self.lineRange = Self.singleValueRange(line)
+        self.columnRange = Self.singleValueRange(column)
     }
 
     /// Construct a SourceLocation with a line/column range
-    public init(path: String, lineRange: Range<Int>?, columnRange: Range<Int>?) {
+    init(path: String, lineRange: Range<Int>?, columnRange: Range<Int>?) {
         self.path = path
         self.lineRange = lineRange
         self.columnRange = columnRange
@@ -58,6 +64,10 @@ public struct SourceLocation: CustomStringConvertible, Sendable, Hashable {
             }
         }
         return formatted
+    }
+
+    private static func singleValueRange(_ value: Int) -> Range<Int>? {
+        return value > 0 ? value..<value : nil
     }
 
     private static func format(_ range: Range<Int>) -> String {
