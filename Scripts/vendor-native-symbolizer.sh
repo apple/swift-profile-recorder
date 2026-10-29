@@ -53,8 +53,38 @@ EOF
 
 cp "$backtracing_root"/modules/ImageFormats/Elf/*.h "$target_c_src/include/"
 cp "$backtracing_root"/modules/ImageFormats/Dwarf/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/ImageFormats/PeCoff/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/ImageFormats/CodeView/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/ImageFormats/PDB/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/Compression.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/OS/Libc.h "$target_c_src/include/"
 for f in "$target_c_src/include"/*.h; do
-    mv "$f" "$(dirname "$f")/swipr-$(basename "$f")"
+    # Some headers are only ever compiled as C++ upstream, guard their namespaces and add typedefs for their enums
+    # so they also work as C
+    awk '
+    /^(namespace swift \{|\} \/\/ namespace runtime)$/ && prev != "#ifdef __cplusplus" {
+        print "#ifdef __cplusplus"
+        print
+        getline
+        print
+        print "#endif"
+        prev = "#endif"
+        next
+    }
+    /^PE_ENUM\([^,]+, [a-z_]+\) \{$/ {
+        enum_name = $2
+        sub(/\)$/, "", enum_name)
+    }
+    enum_name != "" && /^};$/ {
+        print
+        print "typedef enum " enum_name " " enum_name ";"
+        enum_name = ""
+        prev = ""
+        next
+    }
+    { print; prev = $0 }
+    ' "$f" > "$(dirname "$f")/swipr-$(basename "$f")"
+    rm "$f"
 done
 
 cat > "$target_c_src/include/CProfileRecorderSwiftELF.h" <<"EOF"
@@ -78,23 +108,45 @@ cat > "$target_c_src/include/CProfileRecorderSwiftELF.h" <<"EOF"
 #include "swipr-elf.h"
 #include "swipr-eh_frame_hdr.h"
 #include "swipr-dwarf.h"
+#include "swipr-pe-coff.h"
+#include "swipr-codeview.h"
+#include "swipr-pdb.h"
+#include "swipr-Compression.h"
+#include "swipr-Libc.h"
 
 #endif
 EOF
 
 swift_files=(
+    AggregatingSymbolSource.swift
+    BacktracerThreadLocals.swift
     ByteSwapping.swift
+    Compression.swift
+    DefaultSymbolLocator.swift
     Dwarf.swift
     Elf.swift
+    ElfImageCache.swift
     Image.swift
     ImageSource.swift
+    Libc.swift
     MemoryReader.swift
+    PDBCache.swift
+    PeCoff.swift
+    PeImageCache.swift
     Registers.swift
+    SymbolLocator.swift
     Utils.swift
 )
 
 for f in "${swift_files[@]}"; do
     cp "$backtracing_root/$f" "$target_swift_src"
+done
+mkdir -p "$target_swift_src/PDB"
+cp "$backtracing_root"/PDB/*.swift "$target_swift_src/PDB"
+# The PDB code needs Swift 6.2 (`unsafe` expressions, `Span`), older compilers get the stubs in
+# ProfileRecorderAddtions+Types.swift (PDB files are only used on Windows anyway)
+for f in "$target_swift_src"/PDB/*.swift "$target_swift_src/PDBCache.swift"; do
+    { echo "#if compiler(>=6.2)"; cat "$f"; echo "#endif"; } > "$f.tmp" && mv "$f.tmp" "$f"
 done
 echo "$desc" > "$here/../Misc/vendored-backtracing_root.version"
 
@@ -148,6 +200,12 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/\<STN_/internal_${prefix}_STN_/g" \
         -e "s/\<STT_/internal_${prefix}_STT_/g" \
         -e "s/\<STV_/internal_${prefix}_STV_/g" \
+        -e "s/\<z_stream(_s|p)?\>/${prefix}_z_stream\1/g" \
+        -e "s/\<(Z_OK|Z_STREAM_END|Z_NO_FLUSH|ZLIB_VERSION)\>/internal_${prefix}_\1/g" \
+        -e "s/\<ZSTD_(in|out)Buffer(_s)?\>/${prefix}_ZSTD_\1Buffer\2/g" \
+        -e "s/\<lzma_(ret|action|allocator|internal|internal_s|reserved_enum|stream)\>/${prefix}_lzma_\1/g" \
+        -e "s/\<LZMA_/internal_${prefix}_LZMA_/g" \
+        -e "s/\<(lzma|zlib)_stream_init\>/${prefix}_\1_stream_init/g" \
         -e "s/@available(.*)//g" \
         -e "s/import Swift//g" \
         -e "s/^let ELF64_/nonisolated(unsafe) let ELF64_/g" \
@@ -159,15 +217,14 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/internal import BacktracingImpl.ImageFormats.Elf/import CProfileRecorderSwiftELF/g" \
         -e "s/internal import BacktracingImpl.OS.Darwin//g" \
         -e "s/internal import BacktracingImpl.OS.SafeReadMemory//g" \
-        -e "s/@_implementationOnly import BacktracingImpl.ImageFormats.Dwarf/import CProfileRecorderSwiftELF/g" \
-        -e "s/@_implementationOnly import BacktracingImpl.ImageFormats.Elf/import CProfileRecorderSwiftELF/g" \
-        -e "s/@_implementationOnly import BacktracingImpl.OS.Darwin//g" \
+        -e "s/@_implementationOnly import BacktracingImpl\.(ImageFormats\.[A-Za-z]+|CompressionLibs|OS\.Libc)$/import CProfileRecorderSwiftELF/g" \
+        -e "s/@_implementationOnly import BacktracingImpl\.(OS\.[A-Za-z]+|Runtime)$//g" \
+        -e "s/swift\.runtime\.backtrace\./CProfileRecorderSwiftELF./g" \
         -e "s/swift\.runtime\./CProfileRecorderSwiftELF./g" \
         -e "s/internal import/import/g" \
-        -e "s/_swift_open/open/g" \
-        -e "s/_swift_get_errno\(\)/errno/g" \
+        -e "s/\<_swift_(open|get_errno|set_errno)\>/${prefix}_swift_\1/g" \
         -e "s/mach_task_self\(\)/mach_task_self_/g" \
-        -e "s/typealias SourceLocation = SymbolicatedBacktrace.SourceLocation//g" \
+        -e "s/SymbolicatedBacktrace\.SourceLocation/_ProfileRecorderSampleConversion.SourceLocation/g" \
         -e "s/@_specialize\(kind: full, where R == RemoteMemoryReader\)//g" \
         -e "s/@_specialize\(kind: full, where R == MemserverMemoryReader\)//g" \
         -e "s/@_specialize\(kind: full, where R == RemoteMemoryReader, Traits == Elf32Traits\)//g" \
@@ -183,88 +240,34 @@ find "$target_c_src" "$target_swift_src" \
         -e "1s%^%$(echo "$vendored_file_text" | tr '\n' '%' | sed 's/%/\\n/g')%" \
         '{}' \;
 
-# Comment out compression-related code in Elf.swift (unsupported features)
-elf_swift="$target_swift_src/Elf.swift"
+# vendor-core-symbolication-symbolizer.sh makes CoreSymbolication.swift's `Sym` internal, which clashes with this one
+gsed -ri "s/\<Sym\>/CompressionSym/g" "$target_swift_src/Compression.swift"
 
+# Comment out the Backtrace.Image conformance (Backtrace is not vendored),
+# including the attribute line in front of it
+symbol_locator="$target_swift_src/SymbolLocator.swift"
 awk '
-# Comment out .gnu_debugdata block
-/if let debugData = getSection\("\.gnu_debugdata"\)/ {
-    print "/*"
-    in_debugdata = 1
-    brace_count = 0
+pending != "" {
+    if (/^extension Backtrace\.Image: /) {
+        print "/*"
+        in_backtrace_image = 1
+    }
+    print pending
+    pending = ""
 }
-in_debugdata {
+/^@/ && !in_backtrace_image {
+    pending = $0
+    next
+}
+in_backtrace_image && /^}$/ {
     print
-    brace_count += gsub(/{/, "{")
-    brace_count -= gsub(/}/, "}")
-    if (brace_count == 0) {
-        print "*/"
-        in_debugdata = 0
-    }
-    next
-}
-
-# Replace elfCompressedImageSource with () // compression unsupported
-/return try ImageSource\(elfCompressedImageSource:/ {
-    print "              () // compression unsupported"
-    getline  # skip the traits: line
-    next
-}
-
-# Comment out zname == sname block
-/if zname == sname \{/ {
-    print "/*"
-    in_zname = 1
-    zname_brace = 0
-}
-in_zname {
-    print
-    zname_brace += gsub(/{/, "{")
-    zname_brace -= gsub(/}/, "}")
-    if (zname_brace == 0) {
-        print "*/"
-        in_zname = 0
-    }
-    next
-}
-
-# Comment out CompressedImageSourceError catch blocks (keep the } before catch
-# and the trailing catch-all because the do blocks contain other throwing code)
-/\} catch let CompressedImageSourceError\.libraryNotFound/ {
-    print "      }"
-    print "/*"
-    print "      catch let CompressedImageSourceError.libraryNotFound(library) {"
-    in_catch = 1
-    next
-}
-in_catch {
-    if (/\} catch \{/) {
-        print "      }"
-        print "*/"
-        print "      catch {"
-        in_catch = 0
-    } else {
-        print
-    }
-    next
-}
-
-# Comment out the SymbolLocator.Image conformance (SymbolLocator is not vendored)
-/^\/\/ \.\. SymbolLocator\.Image / {
-    print "/*"
-    in_symbol_locator = 1
-}
-in_symbol_locator && /^\/\/ \.\. Testing / {
     print "*/"
-    in_symbol_locator = 0
-}
-in_symbol_locator {
-    print
+    in_backtrace_image = 0
     next
 }
-
 { print }
-' "$elf_swift" > "$elf_swift.tmp" && mv "$elf_swift.tmp" "$elf_swift"
+END { if (pending != "") print pending }
+' "$symbol_locator" > "$symbol_locator.tmp" && mv "$symbol_locator.tmp" "$symbol_locator"
 
 # Truncate MemoryReader.swift - remove new platform-specific memory readers
 # Keep only up to the end of "extension MemoryReader { ... }"

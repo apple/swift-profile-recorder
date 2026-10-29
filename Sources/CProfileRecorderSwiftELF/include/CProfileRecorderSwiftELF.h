@@ -34,5 +34,10 @@
 #include "swipr-elf.h"
 #include "swipr-eh_frame_hdr.h"
 #include "swipr-dwarf.h"
+#include "swipr-pe-coff.h"
+#include "swipr-codeview.h"
+#include "swipr-pdb.h"
+#include "swipr-Compression.h"
+#include "swipr-Libc.h"
 
 #endif

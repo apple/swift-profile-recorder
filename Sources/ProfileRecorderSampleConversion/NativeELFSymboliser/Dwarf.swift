@@ -2339,7 +2339,7 @@ class DwarfReader<S: DwarfSource & AnyObject> {
     return result
   }
 
-
+  typealias SourceLocation = _ProfileRecorderSampleConversion.SourceLocation
 
   func sourceLocation(
     for address: Address

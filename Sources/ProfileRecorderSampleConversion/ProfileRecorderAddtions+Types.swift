@@ -23,48 +23,87 @@ public struct SourceLocation: CustomStringConvertible, Sendable, Hashable {
     public var path: String
 
     /// The line number.
-    public var line: Int
+    public var line: Int { self.lineRange?.lowerBound ?? 0 }
 
     /// The column number.
-    public var column: Int
+    public var column: Int { self.columnRange?.lowerBound ?? 0 }
+
+    /// The line range.
+    public var lineRange: Range<Int>?
+
+    /// The column range.
+    public var columnRange: Range<Int>?
+
+    /// Construct a SourceLocation with a single line/column
+    public init(path: String, line: Int, column: Int = 0) {
+        self.path = path
+        self.lineRange = line > 0 ? line..<line : nil
+        self.columnRange = column > 0 ? column..<column : nil
+    }
+
+    /// Construct a SourceLocation with a line/column range
+    public init(path: String, lineRange: Range<Int>?, columnRange: Range<Int>?) {
+        self.path = path
+        self.lineRange = lineRange
+        self.columnRange = columnRange
+    }
 
     /// Provide a textual description.
     public var description: String {
-        if column > 0 && line > 0 {
-            return "\(path):\(line):\(column)"
-        } else if line > 0 {
-            return "\(path):\(line)"
+        var formatted = self.path
+        if let lineRange = self.lineRange {
+            formatted += ":\(Self.format(lineRange))"
+            if let columnRange = self.columnRange {
+                formatted += ":\(Self.format(columnRange))"
+            }
+        }
+        return formatted
+    }
+
+    private static func format(_ range: Range<Int>) -> String {
+        if range.lowerBound == range.upperBound {
+            return "\(range.lowerBound)"
         } else {
-            return path
+            return "\(range.lowerBound)-\(range.upperBound)"
         }
     }
 }
 
-// The subset of the Swift runtime's `SymbolSource` that the vendored ELF/DWARF code (`NativeELFSymboliser`) needs.
-
-struct SymbolLocationSymbol: Sendable, Hashable {
-    var name: String
-    var offset: Int
-    var size: Int?
-}
-
-struct SymbolLocationCallSiteInfo: Sendable, Hashable {
-    var rawName: String?
-    var name: String?
-    var location: SourceLocation
-}
-
-protocol SymbolSource {
-    typealias Address = UInt64
-
-    typealias Symbol = SymbolLocationSymbol
-    typealias CallSiteInfo = SymbolLocationCallSiteInfo
-    typealias SourceLocation = _ProfileRecorderSampleConversion.SourceLocation
-
-    func lookupSymbol(address: Address) -> Symbol?
-    func sourceLocation(for address: Address) -> SourceLocation?
-    func inlineCallSites(at address: Address) -> [CallSiteInfo]
-}
-
 /// The vendored code reports recoverable DWARF parsing problems through the Swift runtime, we ignore them.
 func swift_reportWarning(_ flags: UInt32, _ message: String) {}
+
+#if !compiler(>=6.2)
+// The vendored PDB support needs Swift 6.2, these stubs provide what `DefaultSymbolLocator` uses. PDB files are only
+// used on Windows anyway.
+
+final class PDBFile: SymbolSource {
+    var signature: [UInt8] = []
+    var age: UInt32 = 0
+
+    init?(path: String) {
+        return nil
+    }
+
+    func lookupSymbol(address: Address) -> Symbol? {
+        return nil
+    }
+
+    func sourceLocation(for address: Address) -> SourceLocation? {
+        return nil
+    }
+
+    func inlineCallSites(at address: Address) -> [CallSiteInfo] {
+        return []
+    }
+}
+
+final class PDBCache {
+    static var threadLocal: PDBCache {
+        return PDBCache()
+    }
+
+    func lookup(path: String?) -> PDBFile? {
+        return nil
+    }
+}
+#endif

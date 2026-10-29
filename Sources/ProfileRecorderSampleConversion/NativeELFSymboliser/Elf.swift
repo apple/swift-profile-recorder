@@ -1548,13 +1548,13 @@ final class ElfImage<SomeElfTraits: ElfTraits> : DwarfSource {
             let subSource = try source[base..<end]
 
             if (shdr.sh_flags & Traits.Shdr.Flags(internal_SWIPR_SHF_COMPRESSED)) != 0 {
-              () // compression unsupported
+              return try ImageSource(elfCompressedImageSource: subSource,
+                                     traits: Traits.self)
             } else {
               return subSource
             }
           }
 
-/*
           if zname == sname {
             let base = ImageSource.Address(shdr.sh_offset)
             let end = base + ImageSource.Size(shdr.sh_size)
@@ -1562,20 +1562,15 @@ final class ElfImage<SomeElfTraits: ElfTraits> : DwarfSource {
 
             return try ImageSource(gnuCompressedImageSource: subSource)
           }
-*/
         }
-      }
-/*
-      catch let CompressedImageSourceError.libraryNotFound(library) {
+      } catch let CompressedImageSourceError.libraryNotFound(library) {
         swift_reportWarning(0,
                             """
                               swift-runtime: warning: \(library) not found, \
                               unable to decode the \(name) section in \
                               \(imageName)
                               """)
-      }
-*/
-      catch {
+      } catch {
       }
     }
 
@@ -1719,7 +1714,7 @@ final class ElfImage<SomeElfTraits: ElfTraits> : DwarfSource {
     )
   }
 
-
+  typealias SourceLocation = _ProfileRecorderSampleConversion.SourceLocation
 
   func sourceLocation(
     for address: Traits.Address
@@ -1944,7 +1939,6 @@ extension ElfImage: SymbolSource {
   }
 }
 
-/*
 // .. SymbolLocator.Image ......................................................
 
 @_spi(SymbolLocation)
@@ -1968,7 +1962,6 @@ extension ElfImage: SymbolLocator.Image {
 
 }
 
-*/
 // .. Testing ..................................................................
 
 @_spi(ElfTest)

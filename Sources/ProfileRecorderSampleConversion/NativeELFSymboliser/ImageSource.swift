@@ -199,18 +199,18 @@ struct ImageSource: CustomStringConvertible {
       self.init(mapped: UnsafeRawBufferPointer(
                   start: base, count: size))
       #else
-      let fd = open(path, O_RDONLY, 0)
+      let fd = SWIPR_swift_open(path, O_RDONLY, 0)
       if fd < 0 {
-        throw ImageSourceError.posixError(errno)
+        throw ImageSourceError.posixError(SWIPR_swift_get_errno())
       }
       defer { close(fd) }
       let size = lseek(fd, 0, SEEK_END)
       if size < 0 {
-        throw ImageSourceError.posixError(errno)
+        throw ImageSourceError.posixError(SWIPR_swift_get_errno())
       }
       let base = mmap(nil, Int(size), PROT_READ, MAP_FILE|MAP_PRIVATE, fd, 0)
       if base == nil || base! == UnsafeRawPointer(bitPattern: -1)! {
-        throw ImageSourceError.posixError(errno)
+        throw ImageSourceError.posixError(SWIPR_swift_get_errno())
       }
       self.init(mapped: UnsafeRawBufferPointer(
                   start: base, count: Int(size)))
