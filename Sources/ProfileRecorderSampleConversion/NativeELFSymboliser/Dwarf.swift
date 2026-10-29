@@ -2298,7 +2298,10 @@ class DwarfReader<S: DwarfSource & AnyObject> {
   }
 
   private func lineNumberInfo(for unit: Unit) -> DwarfLineNumberInfo? {
-    guard let lineBase = unit.lineBase else {
+    // Units that we found using .debug_aranges won't have been resolved yet,
+    // and we need their root DIE attributes to find the line number program.
+    guard (try? resolve(unit)) != nil,
+          let lineBase = unit.lineBase else {
       return nil
     }
 
@@ -3219,6 +3222,14 @@ private func printDwarfLookups<S: DwarfSource & AnyObject>(
   for address in addresses {
     print("address \(hex(address, width: 0)):")
 
+    // N.B. This needs to come first; looking up functions resolves the units
+    // that cover the address, and we want to test that we can find line
+    // numbers without that having happened.
+    if let location = try? reader.sourceLocation(for: address) {
+      print("  location: \(location.path):\(location.line):"
+              + "\(location.column)")
+    }
+
     if let function = reader.lookupFunction(at: address) {
       print("  function: \(function.rawName)")
     } else {
@@ -3233,8 +3244,8 @@ private func printDwarfLookups<S: DwarfSource & AnyObject>(
 }
 
 /// Look up each of `addresses` in the DWARF in the ELF image at `path`, and
-/// print the function and the inline call sites (innermost first) that we
-/// find for it.
+/// print the source location, the function and the inline call sites
+/// (innermost first) that we find for it.
 
 func testDwarfLookupsFor(path: String, addresses: [UInt64]) -> Bool {
   guard let source = try? ImageSource(path: path) else {
