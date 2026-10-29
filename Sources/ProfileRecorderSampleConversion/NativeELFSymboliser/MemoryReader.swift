@@ -52,9 +52,8 @@ import Musl
 
 #endif
 
-@_spi(MemoryReaders)
 
-public protocol MemoryReader {
+protocol MemoryReader {
   typealias Address = UInt64
   typealias Size = UInt64
 
@@ -89,15 +88,14 @@ public protocol MemoryReader {
   func fetchString(from addr: Address, length: Int) throws -> String?
 }
 
-@_spi(MemoryReaders)
-public enum MemoryReaderError: Error {
+enum MemoryReaderError: Error {
   case addressCalculationOverflow
 }
 
 
 extension MemoryReader {
 
-  public func prefetch(from address: Address, byteCount: Int) throws {
+  func prefetch(from address: Address, byteCount: Int) throws {
     guard let byteCountAsAddr = Address(exactly: byteCount) else {
       throw MemoryReaderError.addressCalculationOverflow
     }
@@ -107,18 +105,18 @@ extension MemoryReader {
     }
   }
 
-  public func fetch<T>(from address: Address,
+  func fetch<T>(from address: Address,
                        into buffer: UnsafeMutableBufferPointer<T>) throws {
     try fetch(from: address, into: UnsafeMutableRawBufferPointer(buffer))
   }
 
-  public func fetch<T>(from addr: Address,
+  func fetch<T>(from addr: Address,
                        into pointer: UnsafeMutablePointer<T>) throws {
     try fetch(from: addr,
               into: UnsafeMutableBufferPointer(start: pointer, count: 1))
   }
 
-  public func fetch<T>(from addr: Address, count: Int, as: T.Type) throws -> [T] {
+  func fetch<T>(from addr: Address, count: Int, as: T.Type) throws -> [T] {
     let (byteCount, overflow)
       = count.multipliedReportingOverflow(by: MemoryLayout<T>.stride)
     if overflow {
@@ -138,14 +136,14 @@ extension MemoryReader {
     return array
   }
 
-  public func fetch<T>(from addr: Address, as: T.Type) throws -> T {
+  func fetch<T>(from addr: Address, as: T.Type) throws -> T {
     return try withUnsafeTemporaryAllocation(of: T.self, capacity: 1) { buf in
       try fetch(from: addr, into: buf)
       return buf[0]
     }
   }
 
-  public func fetchString(from addr: Address) throws -> (String?, consumedBytes: Int) {
+  func fetchString(from addr: Address) throws -> (String?, consumedBytes: Int) {
     var bytes: [UInt8] = []
     var ptr = addr
     while true {
@@ -160,7 +158,7 @@ extension MemoryReader {
     return (String(decoding: bytes, as: UTF8.self), consumedBytes: bytes.count)
   }
 
-  public func fetchString(from addr: Address, length: Int) throws -> String? {
+  func fetchString(from addr: Address, length: Int) throws -> String? {
     let bytes = try fetch(from: addr, count: length, as: UInt8.self)
     return String(decoding: bytes, as: UTF8.self)
   }

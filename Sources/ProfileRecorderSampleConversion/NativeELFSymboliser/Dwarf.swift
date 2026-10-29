@@ -3147,9 +3147,8 @@ struct DwarfLineNumberInfo {
 
 // .. Testing ..................................................................
 
-@_spi(DwarfTest)
 
-public func testDwarfReaderFor(path: String) -> Bool {
+func testDwarfReaderFor(path: String) -> Bool {
   guard let source = try? ImageSource(path: path) else {
     print("\(path) was not accessible")
     return false
@@ -3236,9 +3235,8 @@ private func printDwarfLookups<S: DwarfSource & AnyObject>(
 /// Look up each of `addresses` in the DWARF in the ELF image at `path`, and
 /// print the function and the inline call sites (innermost first) that we
 /// find for it.
-@_spi(DwarfTest)
 
-public func testDwarfLookupsFor(path: String, addresses: [UInt64]) -> Bool {
+func testDwarfLookupsFor(path: String, addresses: [UInt64]) -> Bool {
   guard let source = try? ImageSource(path: path) else {
     print("\(path) was not accessible")
     return false

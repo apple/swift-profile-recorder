@@ -33,9 +33,8 @@
 
 
 
-@_spi(SymbolLocation)
 extension PDBFile: SymbolSource {
-  public func lookupSymbol(
+  func lookupSymbol(
     address: SymbolSource.Address
   ) -> SymbolSource.Symbol? {
     guard let symbolLookup = lookup(address: UInt32(address)) else {
@@ -47,7 +46,7 @@ extension PDBFile: SymbolSource {
                                size: nil)
   }
 
-  public func sourceLocation(
+  func sourceLocation(
     for address: SymbolSource.Address
   ) -> SymbolSource.SourceLocation? {
     guard let symbolLookup = lookup(address: UInt32(address)) else {
@@ -65,7 +64,7 @@ extension PDBFile: SymbolSource {
     )
   }
 
-  public func inlineCallSites(
+  func inlineCallSites(
     at address: SymbolSource.Address
   ) -> Array<SymbolSource.CallSiteInfo> {
     return []

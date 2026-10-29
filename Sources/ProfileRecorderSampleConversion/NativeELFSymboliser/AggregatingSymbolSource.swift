@@ -33,11 +33,10 @@
 
 
 
-@_spi(Symbolication)
-public struct AggregatingSymbolSource: SymbolSource {
-  public var sources: [any SymbolSource]
+struct AggregatingSymbolSource: SymbolSource {
+  var sources: [any SymbolSource]
 
-  public func lookupSymbol(address: Address) -> Symbol? {
+  func lookupSymbol(address: Address) -> Symbol? {
     for source in sources {
       if let result = source.lookupSymbol(address: address) {
         return result
@@ -46,7 +45,7 @@ public struct AggregatingSymbolSource: SymbolSource {
     return nil
   }
 
-  public func sourceLocation(for address: Address) -> SourceLocation? {
+  func sourceLocation(for address: Address) -> SourceLocation? {
     for source in sources {
       if let result = source.sourceLocation(for: address) {
         return result
@@ -55,7 +54,7 @@ public struct AggregatingSymbolSource: SymbolSource {
     return nil
   }
 
-  public func inlineCallSites(at address: Address) -> Array<CallSiteInfo> {
+  func inlineCallSites(at address: Address) -> Array<CallSiteInfo> {
     for source in sources {
       let result = source.inlineCallSites(at: address)
       if result.count > 0 {

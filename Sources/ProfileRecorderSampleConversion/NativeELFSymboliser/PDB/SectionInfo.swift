@@ -33,46 +33,46 @@
 
 
 
-public struct SectionCharacteristics: OptionSet, Sendable {
-  public typealias RawValue = UInt32
+struct SectionCharacteristics: OptionSet, Sendable {
+  typealias RawValue = UInt32
 
-  public var rawValue: UInt32
+  var rawValue: UInt32
 
-  public init(rawValue: UInt32) {
+  init(rawValue: UInt32) {
     self.rawValue = rawValue
   }
 
-  public static let noPad
+  static let noPad
     = SectionCharacteristics(rawValue: 0x00000008)
-  public static let code
+  static let code
     = SectionCharacteristics(rawValue: 0x00000020)
-  public static let initializedData
+  static let initializedData
     = SectionCharacteristics(rawValue: 0x00000040)
-  public static let uninitializedData
+  static let uninitializedData
     = SectionCharacteristics(rawValue: 0x00000080)
-  public static let noDeferSpeculativeExecution
+  static let noDeferSpeculativeExecution
     = SectionCharacteristics(rawValue: 0x00004000)
-  public static let gpRelative
+  static let gpRelative
     = SectionCharacteristics(rawValue: 0x00008000)
-  public static let hasExtendedRelocations
+  static let hasExtendedRelocations
     = SectionCharacteristics(rawValue: 0x01000000)
-  public static let discardable
+  static let discardable
     = SectionCharacteristics(rawValue: 0x02000000)
-  public static let notCached
+  static let notCached
     = SectionCharacteristics(rawValue: 0x04000000)
-  public static let notPaged
+  static let notPaged
     = SectionCharacteristics(rawValue: 0x08000000)
-  public static let shared
+  static let shared
     = SectionCharacteristics(rawValue: 0x10000000)
-  public static let executable
+  static let executable
     = SectionCharacteristics(rawValue: 0x20000000)
-  public static let readable
+  static let readable
     = SectionCharacteristics(rawValue: 0x40000000)
-  public static let writable
+  static let writable
     = SectionCharacteristics(rawValue: 0x80000000)
 }
 
-public struct SectionInfo {
+struct SectionInfo {
   var name: String
   var virtualAddress: UInt32
   var size: UInt32

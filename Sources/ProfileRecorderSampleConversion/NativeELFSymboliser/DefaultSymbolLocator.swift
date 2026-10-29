@@ -55,15 +55,14 @@ fileprivate let sep = "/"
 fileprivate let elfSymbolPath = "\(symbolPath)/.build-id"
 #endif
 
-@_spi(SymbolLocation)
-open class DefaultSymbolLocator: SymbolLocator {
+class DefaultSymbolLocator: SymbolLocator {
 
-  public init() {}
+  init() {}
 
-  public typealias Image = SymbolLocator.Image
-  public typealias ImageFormat = SymbolLocator.ImageFormat
+  typealias Image = SymbolLocator.Image
+  typealias ImageFormat = SymbolLocator.ImageFormat
 
-  public static var shared: DefaultSymbolLocator {
+  static var shared: DefaultSymbolLocator {
     return BacktracerThreadLocals.threadLocal.defaultSymbolLocator
   }
 
@@ -116,13 +115,13 @@ open class DefaultSymbolLocator: SymbolLocator {
     return peImage
   }
 
-  public func elfDebugSymSubPath(for uuidString: String) -> String {
+  func elfDebugSymSubPath(for uuidString: String) -> String {
     let uuidSuffix = uuidString.dropFirst(2)
     let uuidPrefix = uuidString.prefix(2)
     return "\(uuidPrefix)\(sep)\(uuidSuffix).debug"
   }
 
-  public func elfDebugSymSubPath(for uuid: [UInt8]) -> String {
+  func elfDebugSymSubPath(for uuid: [UInt8]) -> String {
     return elfDebugSymSubPath(for: hex(uuid))
   }
 
@@ -411,7 +410,7 @@ open class DefaultSymbolLocator: SymbolLocator {
     return result
   }
 
-  open func findSymbols(for image: any Image,
+  func findSymbols(for image: any Image,
                           format: ImageFormat) -> (any SymbolSource)? {
     if format == .auto || format == .elf {
       if let source = findSymbolsForElf(image: image) {
@@ -428,7 +427,7 @@ open class DefaultSymbolLocator: SymbolLocator {
     return nil
   }
 
-  open func findImagePaths(image: any Image) -> [String] {
+  func findImagePaths(image: any Image) -> [String] {
     guard let imagePath = image.path else {
       return []
     }
@@ -436,7 +435,7 @@ open class DefaultSymbolLocator: SymbolLocator {
     return [imagePath]
   }
 
-  open func findElfSymbolPaths(image: any Image) -> [String] {
+  func findElfSymbolPaths(image: any Image) -> [String] {
     guard let symbolPath = elfDebugSymPath(for: image) else {
       return []
     }
@@ -444,7 +443,7 @@ open class DefaultSymbolLocator: SymbolLocator {
     return [symbolPath]
   }
 
-  open func findPeCoffSymbolPaths(image: any Image) -> [String] {
+  func findPeCoffSymbolPaths(image: any Image) -> [String] {
     guard let imagePath = image.path else {
       return []
     }
@@ -484,7 +483,7 @@ open class DefaultSymbolLocator: SymbolLocator {
     return nil
   }
 
-  open func find(image: any Image) -> String? {
+  func find(image: any Image) -> String? {
     if let elfImageInfo = findElf(
       image: image,
       paths: findImagePaths(image: image)) {

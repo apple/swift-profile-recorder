@@ -269,6 +269,15 @@ in_backtrace_image && /^}$/ {
 END { if (pending != "") print pending }
 ' "$symbol_locator" > "$symbol_locator.tmp" && mv "$symbol_locator.tmp" "$symbol_locator"
 
+# Nothing outside the vendored code uses its (SPI) public API, make it internal so that upstream API changes don't
+# show up as API breakages of _ProfileRecorderSampleConversion
+find "$target_swift_src" -name '*.swift' -exec gsed -ri \
+    -e '/^[[:space:]]*@_spi\([A-Za-z]+\)[[:space:]]*$/d' \
+    -e 's/@_spi\([A-Za-z]+\)[[:space:]]+//g' \
+    -e 's/\<public[[:space:]]+//g' \
+    -e 's/\<open[[:space:]]+(class|func|var|subscript)\>/\1/g' \
+    '{}' \;
+
 # Truncate MemoryReader.swift - remove new platform-specific memory readers
 # Keep only up to the end of "extension MemoryReader { ... }"
 memory_reader="$target_swift_src/MemoryReader.swift"

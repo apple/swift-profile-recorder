@@ -437,7 +437,7 @@ struct ImageSource: CustomStringConvertible {
 // MemoryReader support
 
 extension ImageSource: MemoryReader {
-  public func prefetch(from address: Address, byteCount: Int) throws {
+  func prefetch(from address: Address, byteCount: Int) throws {
     guard let offset = Int(exactly: address),
           bytes.count >= byteCount,
           offset <= bytes.count - byteCount else {
@@ -445,7 +445,7 @@ extension ImageSource: MemoryReader {
     }
   }
 
-  public func fetch(from address: Address,
+  func fetch(from address: Address,
                     into buffer: UnsafeMutableRawBufferPointer) throws {
     guard let offset = Int(exactly: address),
           bytes.count >= buffer.count &&
@@ -456,7 +456,7 @@ extension ImageSource: MemoryReader {
                         rebasing: bytes[offset..<offset + buffer.count]))
   }
 
-  public func fetch<T>(from address: Address, as type: T.Type) throws -> T {
+  func fetch<T>(from address: Address, as type: T.Type) throws -> T {
     let size = MemoryLayout<T>.size
     guard let offset = Int(exactly: address),
             bytes.count >= size &&
@@ -466,7 +466,7 @@ extension ImageSource: MemoryReader {
     return bytes.loadUnaligned(fromByteOffset: offset, as: type)
   }
 
-  public func fetchString(from address: Address) throws
+  func fetchString(from address: Address) throws
     -> (String?, consumedBytes: Int) {
     guard let offset = Int(exactly: address),
             offset >= 0 && offset <= bytes.count else {
@@ -479,7 +479,7 @@ extension ImageSource: MemoryReader {
             consumedBytes: len == maxLen ? maxLen : len + 1)
   }
 
-  public func fetchString(from address: Address, length: Int) throws -> String? {
+  func fetchString(from address: Address, length: Int) throws -> String? {
     guard let offset = Int(exactly: address),
             bytes.count >= length &&
             offset >= 0 && offset <= bytes.count - length else {

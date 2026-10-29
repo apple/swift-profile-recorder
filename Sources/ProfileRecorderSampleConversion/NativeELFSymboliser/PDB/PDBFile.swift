@@ -59,56 +59,55 @@ extension SC2 {
   }
 }
 
-@_spi(PDB)
-public class PDBFile {
+class PDBFile {
   var msf: MultiStreamFile
 
-  public struct Version: RawRepresentable, Comparable, Sendable {
-    public let rawValue: UInt32
+  struct Version: RawRepresentable, Comparable, Sendable {
+    let rawValue: UInt32
 
-    public init(rawValue: UInt32) {
+    init(rawValue: UInt32) {
       self.rawValue = rawValue
     }
 
-    public static let vc2     = Version(rawValue: 19941610)
-    public static let vc4     = Version(rawValue: 19950623)
-    public static let vc41    = Version(rawValue: 19950814)
-    public static let vc50    = Version(rawValue: 19960307)
-    public static let vc98    = Version(rawValue: 19970604)
-    public static let vc70    = Version(rawValue: 20000404)
-    public static let vc70dep = Version(rawValue: 19990604)
-    public static let vc80    = Version(rawValue: 20030901)
-    public static let vc110   = Version(rawValue: 20091201)
-    public static let vc140   = Version(rawValue: 20140508)
+    static let vc2     = Version(rawValue: 19941610)
+    static let vc4     = Version(rawValue: 19950623)
+    static let vc41    = Version(rawValue: 19950814)
+    static let vc50    = Version(rawValue: 19960307)
+    static let vc98    = Version(rawValue: 19970604)
+    static let vc70    = Version(rawValue: 20000404)
+    static let vc70dep = Version(rawValue: 19990604)
+    static let vc80    = Version(rawValue: 20030901)
+    static let vc110   = Version(rawValue: 20091201)
+    static let vc140   = Version(rawValue: 20140508)
 
-    public static func == (lhs: Self, rhs: Self) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
       return lhs.rawValue == rhs.rawValue
     }
 
-    public static func < (lhs: Self, rhs: Self) -> Bool {
+    static func < (lhs: Self, rhs: Self) -> Bool {
       return lhs.rawValue < rhs.rawValue
     }
   }
 
-  public struct DebugInfoVersion: RawRepresentable, Comparable, Sendable {
-    public let rawValue: UInt32
+  struct DebugInfoVersion: RawRepresentable, Comparable, Sendable {
+    let rawValue: UInt32
 
-    public init(rawValue: UInt32) {
+    init(rawValue: UInt32) {
       self.rawValue = rawValue
     }
 
-    public static let v0 = DebugInfoVersion(rawValue: 0)
-    public static let v41 = DebugInfoVersion(rawValue: 930803)
-    public static let v50 = DebugInfoVersion(rawValue: 19960307)
-    public static let v60 = DebugInfoVersion(rawValue: 19970606)
-    public static let v70 = DebugInfoVersion(rawValue: 19990903)
-    public static let v110 = DebugInfoVersion(rawValue: 20091201)
+    static let v0 = DebugInfoVersion(rawValue: 0)
+    static let v41 = DebugInfoVersion(rawValue: 930803)
+    static let v50 = DebugInfoVersion(rawValue: 19960307)
+    static let v60 = DebugInfoVersion(rawValue: 19970606)
+    static let v70 = DebugInfoVersion(rawValue: 19990903)
+    static let v110 = DebugInfoVersion(rawValue: 20091201)
 
-    public static func == (lhs: Self, rhs: Self) -> Bool {
+    static func == (lhs: Self, rhs: Self) -> Bool {
       return lhs.rawValue == rhs.rawValue
     }
 
-    public static func < (lhs: Self, rhs: Self) -> Bool {
+    static func < (lhs: Self, rhs: Self) -> Bool {
       return lhs.rawValue < rhs.rawValue
     }
   }
@@ -117,11 +116,11 @@ public class PDBFile {
     return msf.streams.count
   }
 
-  public private(set) var version: Version
-  public private(set) var signature: [UInt8]
-  public private(set) var age: UInt32
+  private(set) var version: Version
+  private(set) var signature: [UInt8]
+  private(set) var age: UInt32
 
-  public private(set) var debugInfoVersion: DebugInfoVersion
+  private(set) var debugInfoVersion: DebugInfoVersion
 
   var globalSymbolIndexStream: Int
   var publicSymbolIndexStream: Int
@@ -143,7 +142,7 @@ public class PDBFile {
 
   private(set) var features: Features
 
-  public convenience init?(path: String) {
+  convenience init?(path: String) {
     guard let msf = MultiStreamFile(path: path) else {
       return nil
     }
@@ -758,22 +757,22 @@ public class PDBFile {
     }
   }
 
-  public struct SourceLocation: CustomStringConvertible, Sendable {
-    public struct Flags: OptionSet, Sendable {
-      public var rawValue: Int
+  struct SourceLocation: CustomStringConvertible, Sendable {
+    struct Flags: OptionSet, Sendable {
+      var rawValue: Int
 
-      public init(rawValue: Int) { self.rawValue = rawValue; }
+      init(rawValue: Int) { self.rawValue = rawValue; }
 
-      public static let noStepOnto = Flags(rawValue: 1 << 0)
-      public static let noStepInto = Flags(rawValue: 1 << 1)
+      static let noStepOnto = Flags(rawValue: 1 << 0)
+      static let noStepInto = Flags(rawValue: 1 << 1)
     }
 
-    public var filename: String
-    public var lineRange: Range<Int>?
-    public var columnRange: Range<Int>?
-    public var flags: Flags
+    var filename: String
+    var lineRange: Range<Int>?
+    var columnRange: Range<Int>?
+    var flags: Flags
 
-    public var description: String {
+    var description: String {
       var formatted = filename
 
       if let lineRange {
@@ -891,13 +890,13 @@ public class PDBFile {
     }
   }
 
-  public struct SymbolLookup: CustomStringConvertible {
-    public var rawName: String?
-    public var name: String
-    public var offset: UInt32
-    public var sourceLocation: SourceLocation?
+  struct SymbolLookup: CustomStringConvertible {
+    var rawName: String?
+    var name: String
+    var offset: UInt32
+    var sourceLocation: SourceLocation?
 
-    public var description: String {
+    var description: String {
       var formatted: String
 
       if offset == 0 {
@@ -914,7 +913,7 @@ public class PDBFile {
     }
   }
 
-  public func lookupFunction(for address: UInt32) -> Int? {
+  func lookupFunction(for address: UInt32) -> Int? {
     var min = 0, max = functions.count
     while min < max {
       let mid = min + (max - min) / 2
@@ -932,7 +931,7 @@ public class PDBFile {
     return nil
   }
 
-  public func lookup(address: UInt32) -> SymbolLookup? {
+  func lookup(address: UInt32) -> SymbolLookup? {
     guard let funcIndex = lookupFunction(for: address) else {
       return nil
     }

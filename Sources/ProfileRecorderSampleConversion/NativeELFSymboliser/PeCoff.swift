@@ -940,10 +940,9 @@ extension PeCoffImage: DwarfSource {
 
 }
 
-@_spi(SymbolLocation)
 extension PeCoffImage: SymbolLocator.Image {
 
-  public var name: String? {
+  var name: String? {
     guard let path = self.path else {
       return nil
     }
@@ -951,15 +950,15 @@ extension PeCoffImage: SymbolLocator.Image {
     return String(filename)
   }
 
-  public var path: String? {
+  var path: String? {
     return source.path
   }
 
-  public var uuid: [UInt8]? {
+  var uuid: [UInt8]? {
     return codeview?.uuid
   }
 
-  public var age: UInt32? {
+  var age: UInt32? {
     return codeview?.age
   }
 

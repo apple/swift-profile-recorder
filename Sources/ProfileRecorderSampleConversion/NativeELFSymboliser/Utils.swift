@@ -43,8 +43,7 @@ import Glibc
 import Musl
 #endif
 
-@_spi(Utils)
-public func hex<T: FixedWidthInteger>(_ value: T,
+func hex<T: FixedWidthInteger>(_ value: T,
                                         prefix shouldPrefix: Bool = true,
                                         width: Int = MemoryLayout<T>.size * 2)
   -> String {
@@ -56,8 +55,7 @@ public func hex<T: FixedWidthInteger>(_ value: T,
   return "\(prefix)\(padding)\(digits)"
 }
 
-@_spi(Utils)
-public func hex(_ bytes: some Sequence<UInt8>) -> String {
+func hex(_ bytes: some Sequence<UInt8>) -> String {
   return bytes.map{ hex($0, prefix: false) }.joined(separator: "")
 }
 
@@ -177,9 +175,8 @@ func realPath(_ path: String) -> String? {
 }
 
 #if os(Linux)
-@_spi(Utils)
 
-public func readString(from file: String) -> String? {
+func readString(from file: String) -> String? {
   let fd = open(file, O_RDONLY, 0)
   if fd < 0 {
     return nil
@@ -205,9 +202,8 @@ public func readString(from file: String) -> String? {
 }
 #endif
 
-@_spi(Utils)
 
-public func stripWhitespace<S: StringProtocol>(_ s: S)
+func stripWhitespace<S: StringProtocol>(_ s: S)
     -> S.SubSequence {
   guard let firstNonWhitespace = s.firstIndex(where: { !$0.isWhitespace })
   else {
@@ -218,8 +214,7 @@ public func stripWhitespace<S: StringProtocol>(_ s: S)
 }
 
 /// Escape a JSON string
-@_spi(Utils)
-public func escapeJSON(_ s: String) -> String {
+func escapeJSON(_ s: String) -> String {
   var result = ""
   let utf8View = s.utf8
   var chunk = utf8View.startIndex

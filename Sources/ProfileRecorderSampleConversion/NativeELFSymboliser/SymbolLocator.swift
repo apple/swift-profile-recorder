@@ -35,15 +35,13 @@
 
 
 
-@_spi(SymbolLocation)
-public struct SymbolLocationSymbol: Sendable, Hashable, Equatable {
+struct SymbolLocationSymbol: Sendable, Hashable, Equatable {
   var name: String
   var offset: Int
   var size: Int?
 }
 
-@_spi(SymbolLocation)
-public struct SymbolLocationCallSiteInfo: Sendable, Hashable, Equatable {
+struct SymbolLocationCallSiteInfo: Sendable, Hashable, Equatable {
   var rawName: String?
   var name: String?
   var location: _ProfileRecorderSampleConversion.SourceLocation
@@ -52,8 +50,7 @@ public struct SymbolLocationCallSiteInfo: Sendable, Hashable, Equatable {
 /// A `SymbolSource` is a place where we can fetch information about symbols.
 /// It *may* be an image of some sort, or it could be some other kind of
 /// thing (e.g. for Windows binaries, a PDB file).
-@_spi(SymbolLocation)
-public protocol SymbolSource {
+protocol SymbolSource {
   typealias Address = UInt64
 
   typealias Symbol = SymbolLocationSymbol
@@ -65,8 +62,7 @@ public protocol SymbolSource {
   func inlineCallSites(at address: Address) -> Array<CallSiteInfo>
 }
 
-@_spi(SymbolLocation)
-public protocol SymbolLocator {
+protocol SymbolLocator {
 
   typealias Image = SymbolLoader.Image
   typealias ImageFormat = SymbolLoader.ImageFormat
@@ -78,32 +74,29 @@ public protocol SymbolLocator {
 
 }
 
-@_spi(Symbolication)
 extension SymbolLocator {
-  public func findSymbols(for image: any Image) -> (any SymbolSource)? {
+  func findSymbols(for image: any Image) -> (any SymbolSource)? {
     return findSymbols(for: image, format: .auto)
   }
 }
 
 /*
-@_spi(SymbolLocation)
 extension Backtrace.Image: SymbolLocator.Image {
-  public var uuid: [UInt8]? { uniqueID }
-  public var age: UInt32? { nil }
+  var uuid: [UInt8]? { uniqueID }
+  var age: UInt32? { nil }
 }
 */
 
-@_spi(SymbolLocation)
-public struct SymbolLoader {
+struct SymbolLoader {
 
-  public protocol Image {
+  protocol Image {
     var name: String? { get }
     var path: String? { get }
     var uuid: [UInt8]? { get }
     var age: UInt32? { get }
   }
 
-  public enum ImageFormat {
+  enum ImageFormat {
     case auto
     case elf
     case peCoff

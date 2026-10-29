@@ -1087,7 +1087,7 @@ struct ElfSymbolTable<SomeElfTraits: ElfTraits>: ElfSymbolTableProtocol {
 
   @_specialize(kind: full, where SomeElfTraits == Elf32Traits)
   @_specialize(kind: full, where SomeElfTraits == Elf64Traits)
-  public func merged(with other: ElfSymbolTable<Traits>) -> ElfSymbolTable<Traits> {
+  func merged(with other: ElfSymbolTable<Traits>) -> ElfSymbolTable<Traits> {
     var merged: [Symbol] = []
 
     var ourNdx = 0, theirNdx = 0
@@ -1131,7 +1131,7 @@ struct ElfSymbolTable<SomeElfTraits: ElfTraits>: ElfSymbolTableProtocol {
 
   @_specialize(kind: full, where SomeElfTraits == Elf32Traits)
   @_specialize(kind: full, where SomeElfTraits == Elf64Traits)
-  public func lookupSymbol(address: Traits.Address) -> Symbol? {
+  func lookupSymbol(address: Traits.Address) -> Symbol? {
     var min = 0
     var max = _symbols.count
 
@@ -1378,7 +1378,7 @@ final class ElfImage<SomeElfTraits: ElfTraits> : DwarfSource {
   }
 
   private var _uuid: [UInt8]?
-  public var uuid: [UInt8]? {
+  var uuid: [UInt8]? {
     if let uuid = _uuid {
       return uuid
     }
@@ -1941,10 +1941,9 @@ extension ElfImage: SymbolSource {
 
 // .. SymbolLocator.Image ......................................................
 
-@_spi(SymbolLocation)
 extension ElfImage: SymbolLocator.Image {
 
-  public var name: String? {
+  var name: String? {
     guard let path = self.path else {
       return nil
     }
@@ -1952,11 +1951,11 @@ extension ElfImage: SymbolLocator.Image {
     return String(filename)
   }
 
-  public var path: String? {
+  var path: String? {
     return source.path
   }
 
-  public var age: UInt32? {
+  var age: UInt32? {
     return nil
   }
 
@@ -1964,9 +1963,8 @@ extension ElfImage: SymbolLocator.Image {
 
 // .. Testing ..................................................................
 
-@_spi(ElfTest)
 
-public func testElfImageAt(path: String) -> Bool {
+func testElfImageAt(path: String) -> Bool {
   guard let source = try? ImageSource(path: path) else {
     print("\(path) was not accessible")
     return false
