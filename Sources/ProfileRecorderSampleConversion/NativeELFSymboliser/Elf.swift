@@ -248,64 +248,6 @@ let SWIPR_elf_hash = CProfileRecorderSwiftELF.SWIPR_elf_hash
 
 // .. Utilities ................................................................
 
-private func realPath(_ path: String) -> String? {
-  #if os(Windows)
-  let hFile: HANDLE = path.withCString(encodedAs: UTF16.self) {
-    return CreateFileW($0,
-                       GENERIC_READ,
-                       DWORD(FILE_SHARE_READ),
-                       nil,
-                       DWORD(OPEN_EXISTING),
-                       DWORD(FILE_ATTRIBUTE_NORMAL),
-                       nil)
-  }
-
-  if hFile == INVALID_HANDLE_VALUE {
-    return nil
-  }
-  defer {
-    CloseHandle(hFile)
-  }
-
-  var bufferSize = 1024
-  var result: String? = nil
-  while result == nil {
-    result = withUnsafeTemporaryAllocation(of: WCHAR.self,
-                                           capacity: 1024) { buffer in
-      let dwRet = GetFinalPathNameByHandleW(hFile,
-                                            buffer.baseAddress,
-                                            DWORD(buffer.count),
-                                            DWORD(VOLUME_NAME_DOS))
-      if dwRet >= bufferSize {
-        bufferSize = Int(dwRet + 1)
-        return nil
-      } else {
-        return String(decoding: buffer, as: UTF16.self)
-      }
-    }
-  }
-
-  return result
-  #else
-  guard let result = realpath(path, nil) else {
-    return nil
-  }
-
-  let s = String(cString: result)
-
-  free(result)
-
-  return s
-  #endif
-}
-
-private func dirname(_ path: String) -> Substring {
-  guard let lastSlash = path.lastIndex(of: "/") else {
-    return ""
-  }
-  return path.prefix(upTo: lastSlash)
-}
-
 private let crc32Table: [UInt32] = [
   0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
   0xe963a535, 0x9e6495a3, 0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
@@ -1073,17 +1015,6 @@ protocol ElfSymbolTableProtocol {
 }
 
 
-protocol ElfSymbolLookupProtocol {
-  associatedtype Traits: ElfTraits
-  typealias CallSiteInfo = DwarfReader<ElfImage<Traits>>.CallSiteInfo
-  
-
-  func lookupSymbol(address: Traits.Address) -> ImageSymbol?
-  func inlineCallSites(at address: Traits.Address) -> ArraySlice<CallSiteInfo>
-  func sourceLocation(for address: Traits.Address) throws -> SourceLocation?
-}
-
-
 struct ElfSymbolTable<SomeElfTraits: ElfTraits>: ElfSymbolTableProtocol {
   typealias Traits = SomeElfTraits
 
@@ -1107,8 +1038,8 @@ struct ElfSymbolTable<SomeElfTraits: ElfTraits>: ElfSymbolTableProtocol {
   @_specialize(kind: full, where SomeElfTraits == Elf32Traits)
   @_specialize(kind: full, where SomeElfTraits == Elf64Traits)
   init?(image: ElfImage<Traits>) {
-    guard let strtab = image.getSection(".strtab", debug: false),
-          let symtab = image.getSection(".symtab", debug: false) else {
+    guard let strtab = image.getSection(".strtab"),
+          let symtab = image.getSection(".symtab") else {
       return nil
     }
 
@@ -1232,8 +1163,7 @@ struct ElfSymbolTable<SomeElfTraits: ElfTraits>: ElfSymbolTableProtocol {
 }
 
 
-final class ElfImage<SomeElfTraits: ElfTraits>
-  : DwarfSource, ElfSymbolLookupProtocol {
+final class ElfImage<SomeElfTraits: ElfTraits> : DwarfSource {
   typealias Traits = SomeElfTraits
   typealias SymbolTable = ElfSymbolTable<SomeElfTraits>
 
@@ -1342,14 +1272,19 @@ final class ElfImage<SomeElfTraits: ElfTraits>
 
       mutating func startHeader() {
         let ph = image.programHeaders[hdrNdx]
+        let limit = ImageSource.Address(image.source.bytes.count)
+        let (base, size): (ImageSource.Address, ImageSource.Address)
 
         if image.source.isMappedImage {
-          noteAddr = ImageSource.Address(ph.p_vaddr)
-          noteEnd = noteAddr + ImageSource.Address(ph.p_memsz)
+          (base, size) = (ImageSource.Address(ph.p_vaddr),
+                          ImageSource.Address(ph.p_memsz))
         } else {
-          noteAddr = ImageSource.Address(ph.p_offset)
-          noteEnd = noteAddr + ImageSource.Address(ph.p_filesz)
+          (base, size) = (ImageSource.Address(ph.p_offset),
+                          ImageSource.Address(ph.p_filesz))
         }
+        noteAddr = Swift.min(base, limit)
+        let (end, ov) = base.addingReportingOverflow(size)
+        noteEnd = ov ? limit : Swift.min(end, limit)
       }
 
       @_specialize(kind: full, where SomeElfTraits == Elf32Traits)
@@ -1378,6 +1313,12 @@ final class ElfImage<SomeElfTraits: ElfTraits>
           }
 
           do {
+            if noteEnd - noteAddr < MemoryLayout<Traits.Nhdr>.size {
+              // The segment is corrupted
+              noteAddr = noteEnd
+              continue
+            }
+
             let nhdr = maybeSwap(try image.source.fetch(from: noteAddr,
                                                         as: Traits.Nhdr.self))
 
@@ -1437,7 +1378,7 @@ final class ElfImage<SomeElfTraits: ElfTraits>
   }
 
   private var _uuid: [UInt8]?
-  var uuid: [UInt8]? {
+  public var uuid: [UInt8]? {
     if let uuid = _uuid {
       return uuid
     }
@@ -1530,22 +1471,23 @@ final class ElfImage<SomeElfTraits: ElfTraits>
       let stringShdr = sectionHeaders[Int(header.e_shstrndx)]
       let base = ImageSource.Address(stringShdr.sh_offset)
       let end = base + ImageSource.Size(stringShdr.sh_size)
-      let stringSource = source[base..<end]
-      let stringSect = ElfStringSection(source: stringSource)
+      if let stringSource = try? source[base..<end] {
+        let stringSect = ElfStringSection(source: stringSource)
 
-      for shdr in sectionHeaders {
-        // All other fields are undefined for internal_SWIPR_SHT_NULL
-        if shdr.sh_type == .internal_SWIPR_SHT_NULL {
-          continue
-        }
+        for shdr in sectionHeaders {
+          // All other fields are undefined for internal_SWIPR_SHT_NULL
+          if shdr.sh_type == .internal_SWIPR_SHT_NULL {
+            continue
+          }
 
-        guard let name = stringSect.getStringAt(index: Int(shdr.sh_name)) else {
-          continue
-        }
+          guard let name = stringSect.getStringAt(index: Int(shdr.sh_name)) else {
+            continue
+          }
 
-        if name == ".eh_frame" {
-          ehFrameInfo.ehFrameSection = Range(base: ImageSource.Address(shdr.sh_offset),
-                                             size: ImageSource.Size(shdr.sh_size))
+          if name == ".eh_frame" {
+            ehFrameInfo.ehFrameSection = Range(base: ImageSource.Address(shdr.sh_offset),
+                                               size: ImageSource.Size(shdr.sh_size))
+          }
         }
       }
     }
@@ -1573,108 +1515,20 @@ final class ElfImage<SomeElfTraits: ElfTraits>
     return name
   }
 
-  // If we have external debug information, this points at it
-  private var _checkedDebugImage: Bool?
-  private var _debugImage: ElfImage<Traits>?
-  var debugImage: ElfImage<Traits>? {
-    if let checked = _checkedDebugImage, checked {
-      return _debugImage
-    }
-
-    let tryPath = { [self] (_ path: String) -> ElfImage<Traits>? in
-      do {
-        let fileSource = try ImageSource(path: path)
-        let image = try ElfImage<Traits>(source: fileSource)
-        _debugImage = image
-        return image
-      } catch {
-        return nil
-      }
-    }
-
-    if let uuid = uuid {
-      let uuidString = hex(uuid)
-      let uuidSuffix = uuidString.dropFirst(2)
-      let uuidPrefix = uuidString.prefix(2)
-      let path = "/usr/lib/debug/.build-id/\(uuidPrefix)/\(uuidSuffix).debug"
-      if let image = tryPath(path) {
-        _debugImage = image
-        _checkedDebugImage = true
-        return image
-      }
-    }
-
-    if let imagePath = source.path, let realImagePath = realPath(imagePath) {
-      let imageDir = dirname(realImagePath)
-      let debugLink = getDebugLink()
-      let debugAltLink = getDebugAltLink()
-
-      let tryLink = { (_ link: String) -> ElfImage<Traits>? in
-        if let image = tryPath("\(imageDir)/\(link)") {
-          return image
-        }
-        if let image = tryPath("\(imageDir)/.debug/\(link)") {
-          return image
-        }
-        if let image = tryPath("/usr/lib/debug/\(imageDir)/\(link)") {
-          return image
-        }
-        return nil
-      }
-
-      if let debugAltLink = debugAltLink, let image = tryLink(debugAltLink.link),
-         image.uuid == debugAltLink.uuid {
-        _debugImage = image
-        _checkedDebugImage = true
-        return image
-      }
-
-      if let debugLink = debugLink, let image = tryLink(debugLink.link),
-         image.debugLinkCRC == debugLink.crc {
-        _debugImage = image
-        _checkedDebugImage = true
-        return image
-      }
-    }
-
-/*
-    if let debugData = getSection(".gnu_debugdata") {
-      do {
-        let source = try ImageSource(lzmaCompressedImageSource: debugData)
-        _debugImage = try ElfImage<Traits>(source: source)
-        _checkedDebugImage = true
-        return _debugImage
-      } catch let CompressedImageSourceError.libraryNotFound(library) {
-        swift_reportWarning(0,
-                            """
-                              swift-runtime: warning: \(library) not found, \
-                              unable to decode the .gnu_debugdata section in \
-                              \(imageName)
-                              """)
-      } catch {
-      }
-    }
-*/
-
-    _checkedDebugImage = true
-    return nil
-  }
-
   /// Find the named section and return an ImageSource pointing at it.
   ///
   /// In general, the section may be compressed or even in a different image;
-  /// this is particularly the case for debug sections.  We will only attempt
-  /// to look for other images if `debug` is `true`.
+  /// this is particularly the case for debug sections.
   @_specialize(kind: full, where SomeElfTraits == Elf32Traits)
   @_specialize(kind: full, where SomeElfTraits == Elf64Traits)
-  func getSection(_ name: String, debug: Bool = false) -> ImageSource? {
+  func getSection(_ name: String) -> ImageSource? {
     if let sectionHeaders = sectionHeaders {
       let zname = ".z" + name.dropFirst()
       let stringShdr = sectionHeaders[Int(header.e_shstrndx)]
       do {
         let base = ImageSource.Address(stringShdr.sh_offset)
         let end = base + ImageSource.Size(stringShdr.sh_size)
-        let stringSource = source[base..<end]
+        let stringSource = try source[base..<end]
         let stringSect = ElfStringSection(source: stringSource)
 
         for shdr in sectionHeaders {
@@ -1691,7 +1545,7 @@ final class ElfImage<SomeElfTraits: ElfTraits>
           if name == sname {
             let base = ImageSource.Address(shdr.sh_offset)
             let end = base + ImageSource.Size(shdr.sh_size)
-            let subSource = source[base..<end]
+            let subSource = try source[base..<end]
 
             if (shdr.sh_flags & Traits.Shdr.Flags(internal_SWIPR_SHF_COMPRESSED)) != 0 {
               () // compression unsupported
@@ -1704,7 +1558,7 @@ final class ElfImage<SomeElfTraits: ElfTraits>
           if zname == sname {
             let base = ImageSource.Address(shdr.sh_offset)
             let end = base + ImageSource.Size(shdr.sh_size)
-            let subSource = source[base..<end]
+            let subSource = try source[base..<end]
 
             return try ImageSource(gnuCompressedImageSource: subSource)
           }
@@ -1719,13 +1573,10 @@ final class ElfImage<SomeElfTraits: ElfTraits>
                               unable to decode the \(name) section in \
                               \(imageName)
                               """)
-      } catch {
       }
 */
-    }
-
-    if debug, let image = debugImage {
-      return image.getSection(name)
+      catch {
+      }
     }
 
     return nil
@@ -1747,12 +1598,12 @@ final class ElfImage<SomeElfTraits: ElfTraits>
       return nil
     }
 
-    guard let link = try? section.fetchString(from: 0) else {
+    guard let (link, linkCount) = try? section.fetchString(from: 0),
+          let link else {
       return nil
     }
 
-    let nullIndex = ImageSource.Address(link.utf8.count)
-    let crcIndex = (nullIndex + 4) & ~3
+    let crcIndex = (ImageSource.Address(linkCount) + 3) & ~3
 
     guard let unswappedCrc = try? section.fetch(
             from: crcIndex, as: UInt32.self
@@ -1776,13 +1627,12 @@ final class ElfImage<SomeElfTraits: ElfTraits>
       return nil
     }
 
-    guard let link = try? section.fetchString(from: 0) else {
+    guard let (link, linkCount) = try? section.fetchString(from: 0),
+          let link else {
       return nil
     }
 
-    let nullIndex = link.utf8.count
-
-    let uuid = [UInt8](section.bytes[(nullIndex + 1)...])
+    let uuid = [UInt8](section.bytes[linkCount...])
 
     return DebugAltLinkInfo(link: link, uuid: uuid)
   }
@@ -1807,50 +1657,19 @@ final class ElfImage<SomeElfTraits: ElfTraits>
   }
 
   var _symbolTable: SymbolTable? = nil
-  var symbolTable: SymbolTable { return _getSymbolTable(debug: false) }
+  var symbolTable: SymbolTable { return _getSymbolTable() }
 
-  func _getSymbolTable(debug: Bool) -> SymbolTable {
+  func _getSymbolTable() -> SymbolTable {
     if let table = _symbolTable {
       return table
     }
 
-    let debugTable: SymbolTable?
-    if !debug, let debugImage = debugImage {
-      debugTable = debugImage._getSymbolTable(debug: true)
-        as any ElfSymbolTableProtocol
-        as? SymbolTable
-    } else {
-      debugTable = nil
-    }
-
     guard let localTable = SymbolTable(image: self) else {
-      // If we have no symbol table, try the debug image
-      let table = debugTable ?? SymbolTable()
-      _symbolTable = table
-      return table
-    }
-
-    // Check if we have a debug image; if we do, get its symbol table and
-    // merge it with this one.  This means that it doesn't matter which
-    // symbols have been stripped in both images.
-    if let debugTable = debugTable {
-      let merged = localTable.merged(with: debugTable)
-      _symbolTable = merged
-      return merged
+      return SymbolTable()
     }
 
     _symbolTable = localTable
     return localTable
-  }
-
-  public func lookupSymbol(address: Traits.Address) -> ImageSymbol? {
-    let relativeAddress = address - Traits.Address(baseAddress)
-    guard let symbol = symbolTable.lookupSymbol(address: relativeAddress) else {
-      return nil
-    }
-
-    return ImageSymbol(name: symbol.name,
-                       offset: Int(relativeAddress - symbol.value))
   }
 
   static var pathSeparator: String { "/" }
@@ -1900,7 +1719,7 @@ final class ElfImage<SomeElfTraits: ElfTraits>
     )
   }
 
-  
+
 
   func sourceLocation(
     for address: Traits.Address
@@ -2069,6 +1888,87 @@ func getElfImageInfo<R: MemoryReader, Traits: ElfTraits>(
   return (endOfText: endOfText, uuid: uuid)
 }
 
+// .. SymbolSource .............................................................
+
+extension ElfImage: SymbolSource {
+  func lookupSymbol(address: SymbolSource.Address) -> SymbolSource.Symbol? {
+    let relativeAddress = Traits.Address(address - baseAddress)
+    guard let symbol = symbolTable.lookupSymbol(address: relativeAddress) else {
+      return nil
+    }
+
+    guard let offset = Int(exactly: relativeAddress - symbol.value) else {
+      return nil
+    }
+    let size = Int(exactly: symbol.size) ?? Int.max
+
+    return SymbolSource.Symbol(
+      name: symbol.name,
+      offset: offset,
+      size: size
+    )
+  }
+
+  func sourceLocation(
+    for address: SymbolSource.Address
+  ) -> SymbolSource.SourceLocation? {
+    guard let dwarfReader else {
+      return nil
+    }
+    return try? dwarfReader.sourceLocation(
+      for: DwarfReader<ElfImage>.Address(address)
+    )
+  }
+
+  func inlineCallSites(
+    at address: SymbolSource.Address
+  ) -> Array<SymbolSource.CallSiteInfo> {
+    guard let dwarfReader else {
+      return []
+    }
+
+    var result: [SymbolSource.CallSiteInfo] = []
+    for site in dwarfReader.lookupInlineCallSites(
+          at: DwarfReader<ElfImage>.Address(address)
+        ) {
+      result.append(SymbolSource.CallSiteInfo(rawName: site.rawName,
+                                              name: site.name,
+                                              location: SourceLocation(
+                                                path: site.filename,
+                                                line: site.line,
+                                                column: site.column
+                                              )))
+    }
+
+    return result
+  }
+}
+
+/*
+// .. SymbolLocator.Image ......................................................
+
+@_spi(SymbolLocation)
+extension ElfImage: SymbolLocator.Image {
+
+  public var name: String? {
+    guard let path = self.path else {
+      return nil
+    }
+    let (_, filename) = splitpath(path)
+    return String(filename)
+  }
+
+  public var path: String? {
+    return source.path
+  }
+
+  public var age: UInt32? {
+    return nil
+  }
+
+}
+
+*/
 // .. Testing ..................................................................
 
 @_spi(ElfTest)
@@ -2100,14 +2000,8 @@ public func testElfImageAt(path: String) -> Bool {
       print("  uuid: <no uuid>")
     }
 
-    if let debugImage = elfImage.debugImage {
-      print("  debug image: \(debugImage.imageName)")
-    } else {
-      print("  debug image: <none>")
-    }
-
     for section in debugSections {
-      if let _ = elfImage.getSection(section, debug: true) {
+      if let _ = elfImage.getSection(section) {
         print("  \(section): found")
       } else {
         print("  \(section): not found")
@@ -2124,14 +2018,8 @@ public func testElfImageAt(path: String) -> Bool {
       print("  uuid: <no uuid>")
     }
 
-    if let debugImage = elfImage.debugImage {
-      print("  debug image: \(debugImage.imageName)")
-    } else {
-      print("  debug image: <none>")
-    }
-
     for section in debugSections {
-      if let _ = elfImage.getSection(section, debug: true) {
+      if let _ = elfImage.getSection(section) {
         print("  \(section): found")
       } else {
         print("  \(section): not found")

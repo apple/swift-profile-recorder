@@ -89,64 +89,68 @@ enum AnyElfImage {
     func lookupRealAndInlinedFrames(address: UInt64, logger: Logger) -> [ImageSymbol]? {
         switch self {
         case .elf32(let image):
-            guard let realFrame = image.lookupSymbol(address: UInt32(truncatingIfNeeded: address)) else {
-                logger.trace(
-                    "could not find symbol",
-                    metadata: [
-                        "address": "0x\(String(address, radix: 16))",
-                        "image": "\(image)",
-                        "image-name": "\(image.imageName)",
-                        "inline-frames": "\(image.inlineCallSites(at: UInt32(truncatingIfNeeded: address)))",
-                    ]
-                )
-                return nil
-            }
-            var symbols: [ImageSymbol] = []
-            for inlineFrame in image.inlineCallSites(at: UInt32(truncatingIfNeeded: address)) {
-                symbols.append(
-                    ImageSymbol(
-                        name: inlineFrame.name ?? "unknown in \(inlineFrame.filename)",
-                        offset: 0
-                    )
-                )
-            }
-            symbols.append(realFrame)
-            return symbols
+            return Self.lookupRealAndInlinedFrames(
+                image: image,
+                address: Self.elf32Address(address),
+                logger: logger
+            )
         case .elf64(let image):
-            guard let realFrame = image.lookupSymbol(address: address) else {
-                logger.trace(
-                    "could not find symbol",
-                    metadata: [
-                        "address": "0x\(String(address, radix: 16))",
-                        "image": "\(image)",
-                        "image-name": "\(image.imageName)",
-                        "inline-frames": "\(image.inlineCallSites(at: address))",
-                    ]
-                )
-                return nil
-            }
-
-            var symbols: [ImageSymbol] = []
-            for inlineFrame in image.inlineCallSites(at: address) {
-                symbols.append(
-                    ImageSymbol(
-                        name: inlineFrame.name ?? "unknown in \(inlineFrame.filename)",
-                        offset: 0
-                    )
-                )
-            }
-            symbols.append(realFrame)
-            return symbols
+            return Self.lookupRealAndInlinedFrames(image: image, address: address, logger: logger)
         }
     }
 
-    func sourceLocation(for address: UInt64) throws -> SourceLocation? {
+    func sourceLocation(for address: UInt64) -> SourceLocation? {
         switch self {
         case .elf32(let image):
-            return try image.sourceLocation(for: UInt32(truncatingIfNeeded: address))
+            return Self.sourceLocation(image: image, address: Self.elf32Address(address))
         case .elf64(let image):
-            return try image.sourceLocation(for: address)
+            return Self.sourceLocation(image: image, address: address)
         }
+    }
+
+    /// `Elf32Image`'s `SymbolSource` methods trap if the address doesn't fit into 32 bits.
+    private static func elf32Address(_ address: UInt64) -> UInt64 {
+        return UInt64(UInt32(truncatingIfNeeded: address))
+    }
+
+    // Generic over `Traits` so that only the `SymbolSource` overloads (taking `UInt64`) match and not the
+    // `Traits.Address` ones that `ElfImage` also has.
+    private static func lookupRealAndInlinedFrames<Traits: ElfTraits>(
+        image: ElfImage<Traits>,
+        address: UInt64,
+        logger: Logger
+    ) -> [ImageSymbol]? {
+        guard let realFrame = image.lookupSymbol(address: address) else {
+            logger.trace(
+                "could not find symbol",
+                metadata: [
+                    "address": "0x\(String(address, radix: 16))",
+                    "image": "\(image)",
+                    "image-name": "\(image.imageName)",
+                    "inline-frames": "\(image.inlineCallSites(at: address))",
+                ]
+            )
+            return nil
+        }
+
+        var symbols: [ImageSymbol] = []
+        for inlineFrame in image.inlineCallSites(at: address) {
+            symbols.append(
+                ImageSymbol(
+                    name: inlineFrame.name ?? "unknown in \(inlineFrame.location.path)",
+                    offset: 0
+                )
+            )
+        }
+        symbols.append(ImageSymbol(name: realFrame.name, offset: realFrame.offset))
+        return symbols
+    }
+
+    private static func sourceLocation<Traits: ElfTraits>(
+        image: ElfImage<Traits>,
+        address: UInt64
+    ) -> SourceLocation? {
+        return image.sourceLocation(for: address)
     }
 }
 

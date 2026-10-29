@@ -158,6 +158,10 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/internal import BacktracingImpl.Runtime//g" \
         -e "s/internal import BacktracingImpl.ImageFormats.Elf/import CProfileRecorderSwiftELF/g" \
         -e "s/internal import BacktracingImpl.OS.Darwin//g" \
+        -e "s/internal import BacktracingImpl.OS.SafeReadMemory//g" \
+        -e "s/@_implementationOnly import BacktracingImpl.ImageFormats.Dwarf/import CProfileRecorderSwiftELF/g" \
+        -e "s/@_implementationOnly import BacktracingImpl.ImageFormats.Elf/import CProfileRecorderSwiftELF/g" \
+        -e "s/@_implementationOnly import BacktracingImpl.OS.Darwin//g" \
         -e "s/swift\.runtime\./CProfileRecorderSwiftELF./g" \
         -e "s/internal import/import/g" \
         -e "s/_swift_open/open/g" \
@@ -174,6 +178,8 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/@_specialize\(kind: full, where R == UnsafeLocalMemoryReader, Traits == Elf32Traits\)//g" \
         -e "s/@_specialize\(kind: full, where R == UnsafeLocalMemoryReader, Traits == Elf64Traits\)//g" \
         -e "s/^#if os\(macOS\) \|\| os\(iOS\) \|\| os\(tvOS\) \|\| os\(watchOS\)$/#if canImport(Darwin)/g" \
+        -e "s/^#if os\(anyAppleOS\)$/#if canImport(Darwin)/g" \
+        -e "s/[[:space:]]+$//" \
         -e "1s%^%$(echo "$vendored_file_text" | tr '\n' '%' | sed 's/%/\\n/g')%" \
         '{}' \;
 
@@ -222,7 +228,8 @@ in_zname {
     next
 }
 
-# Comment out CompressedImageSourceError catch blocks (keep the } before catch)
+# Comment out CompressedImageSourceError catch blocks (keep the } before catch
+# and the trailing catch-all because the do blocks contain other throwing code)
 /\} catch let CompressedImageSourceError\.libraryNotFound/ {
     print "      }"
     print "/*"
@@ -231,16 +238,28 @@ in_zname {
     next
 }
 in_catch {
-    print
     if (/\} catch \{/) {
-        prev_was_catch_open = 1
-    } else if (/^[[:space:]]*\}[[:space:]]*$/ && prev_was_catch_open) {
+        print "      }"
         print "*/"
+        print "      catch {"
         in_catch = 0
-        prev_was_catch_open = 0
     } else {
-        prev_was_catch_open = 0
+        print
     }
+    next
+}
+
+# Comment out the SymbolLocator.Image conformance (SymbolLocator is not vendored)
+/^\/\/ \.\. SymbolLocator\.Image / {
+    print "/*"
+    in_symbol_locator = 1
+}
+in_symbol_locator && /^\/\/ \.\. Testing / {
+    print "*/"
+    in_symbol_locator = 0
+}
+in_symbol_locator {
+    print
     next
 }
 

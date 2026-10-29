@@ -39,3 +39,32 @@ public struct SourceLocation: CustomStringConvertible, Sendable, Hashable {
         }
     }
 }
+
+// The subset of the Swift runtime's `SymbolSource` that the vendored ELF/DWARF code (`NativeELFSymboliser`) needs.
+
+struct SymbolLocationSymbol: Sendable, Hashable {
+    var name: String
+    var offset: Int
+    var size: Int?
+}
+
+struct SymbolLocationCallSiteInfo: Sendable, Hashable {
+    var rawName: String?
+    var name: String?
+    var location: SourceLocation
+}
+
+protocol SymbolSource {
+    typealias Address = UInt64
+
+    typealias Symbol = SymbolLocationSymbol
+    typealias CallSiteInfo = SymbolLocationCallSiteInfo
+    typealias SourceLocation = _ProfileRecorderSampleConversion.SourceLocation
+
+    func lookupSymbol(address: Address) -> Symbol?
+    func sourceLocation(for address: Address) -> SourceLocation?
+    func inlineCallSites(at address: Address) -> [CallSiteInfo]
+}
+
+/// The vendored code reports recoverable DWARF parsing problems through the Swift runtime, we ignore them.
+func swift_reportWarning(_ flags: UInt32, _ message: String) {}
