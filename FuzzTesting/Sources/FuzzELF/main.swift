@@ -17,14 +17,28 @@
 @_cdecl("LLVMFuzzerTestOneInput")
 public func fuzzELF(_ start: UnsafeRawPointer, _ count: Int) -> CInt {
     let buffer = UnsafeRawBufferPointer(start: start, count: count)
-    let source = ImageSource(unowned: buffer, isMappedImage: false)
 
-    if let image = try? Elf32Image(source: source) {
-        exerciseElfImage(image)
+    // Both the file and the mapped (in-memory) image code paths
+    for isMappedImage in [false, true] {
+        let source = ImageSource(unowned: buffer, isMappedImage: isMappedImage)
+
+        if let image = try? Elf32Image(source: source) {
+            exerciseElfImage(image)
+        }
+        if let image = try? Elf64Image(source: source) {
+            exerciseElfImage(image)
+        }
+
+        // The in-memory ELF image parser (used by the backtracer on Linux)
+        _ = getElfImageInfo(at: 0, using: source)
     }
-    if let image = try? Elf64Image(source: source) {
-        exerciseElfImage(image)
-    }
+
+    // The decompression code, directly on the input
+    let raw = ImageSource(unowned: buffer, isMappedImage: false)
+    _ = try? ImageSource(gnuCompressedImageSource: raw)
+    _ = try? ImageSource(lzmaCompressedImageSource: raw)
+    _ = try? ImageSource(elfCompressedImageSource: raw, traits: Elf32Traits.self)
+    _ = try? ImageSource(elfCompressedImageSource: raw, traits: Elf64Traits.self)
 
     return 0
 }
@@ -85,6 +99,15 @@ private func exerciseElfImage<Traits: ElfTraits>(_ image: ElfImage<Traits>) {
     {
         for addr in addresses {
             _ = miniDebugInfo.lookupSymbol(address: UInt64(Traits.Address(truncatingIfNeeded: addr)))
+        }
+    }
+
+    // The DWARF reader directly, including function lookups
+    if let reader = try? DwarfReader(source: image, shouldSwap: image.header.shouldByteSwap) {
+        for addr in addresses {
+            _ = reader.lookupFunction(at: addr)
+            _ = reader.lookupInlineCallSites(at: addr)
+            _ = try? reader.sourceLocation(for: addr)
         }
     }
 
