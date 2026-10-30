@@ -67,10 +67,25 @@ private func exerciseElfImage<Traits: ElfTraits>(_ image: ElfImage<Traits>) {
 
     let symtab = ElfSymbolTable(image: image)
     for addr in addresses {
-        _ = symtab?.lookupSymbol(address: Traits.Address(truncatingIfNeeded: addr))
-        _ = image.lookupSymbol(address: Traits.Address(truncatingIfNeeded: addr))
-        _ = try? image.sourceLocation(for: Traits.Address(truncatingIfNeeded: addr))
-        _ = image.inlineCallSites(at: Traits.Address(truncatingIfNeeded: addr))
+        let address = Traits.Address(truncatingIfNeeded: addr)
+        _ = symtab?.lookupSymbol(address: address)
+        _ = try? image.sourceLocation(for: address)
+        _ = image.inlineCallSites(at: address)
+
+        // The `SymbolSource` API (as used by `NativeELFSymboliser`)
+        _ = image.lookupSymbol(address: UInt64(address))
+        _ = image.sourceLocation(for: UInt64(address))
+        _ = image.inlineCallSites(at: UInt64(address))
+    }
+
+    // MiniDebugInfo, as decompressed by `DefaultSymbolLocator`
+    if let debugData = image.getSection(".gnu_debugdata"),
+        let source = try? ImageSource(lzmaCompressedImageSource: debugData),
+        let miniDebugInfo = try? ElfImage<Traits>(source: source)
+    {
+        for addr in addresses {
+            _ = miniDebugInfo.lookupSymbol(address: UInt64(Traits.Address(truncatingIfNeeded: addr)))
+        }
     }
 
     // DWARF section access
