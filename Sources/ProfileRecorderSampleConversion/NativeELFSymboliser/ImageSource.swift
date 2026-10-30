@@ -199,18 +199,18 @@ struct ImageSource: CustomStringConvertible {
       self.init(mapped: UnsafeRawBufferPointer(
                   start: base, count: size))
       #else
-      let fd = open(path, O_RDONLY, 0)
+      let fd = SWIPR_swift_open(path, O_RDONLY, 0)
       if fd < 0 {
-        throw ImageSourceError.posixError(errno)
+        throw ImageSourceError.posixError(SWIPR_swift_get_errno())
       }
       defer { close(fd) }
       let size = lseek(fd, 0, SEEK_END)
       if size < 0 {
-        throw ImageSourceError.posixError(errno)
+        throw ImageSourceError.posixError(SWIPR_swift_get_errno())
       }
       let base = mmap(nil, Int(size), PROT_READ, MAP_FILE|MAP_PRIVATE, fd, 0)
       if base == nil || base! == UnsafeRawPointer(bitPattern: -1)! {
-        throw ImageSourceError.posixError(errno)
+        throw ImageSourceError.posixError(SWIPR_swift_get_errno())
       }
       self.init(mapped: UnsafeRawBufferPointer(
                   start: base, count: Int(size)))
@@ -253,7 +253,9 @@ struct ImageSource: CustomStringConvertible {
           let oldPart = UnsafeMutableRawBufferPointer(
             rebasing: newBuffer[0..<count]
           )
-          oldPart.copyMemory(from: bytes)
+          oldPart.copyMemory(from:
+            UnsafeRawBufferPointer(rebasing: bytes[0..<count])
+          )
           mutableBytes.deallocate()
           kind = .allocated(count)
         default:
@@ -279,7 +281,7 @@ struct ImageSource: CustomStringConvertible {
       }
 
       if capacity >= byteCount {
-        return mutableBytes
+        return UnsafeMutableRawBufferPointer(mutating: bytes)
       }
 
       let extra = byteCount - capacity
@@ -307,7 +309,7 @@ struct ImageSource: CustomStringConvertible {
       guard case let .allocated(count) = kind else {
         fatalError("Cannot append to immutable image source storage")
       }
-      guard mutableBytes.count - count <= bytes else {
+      guard self.bytes.count - count >= bytes else {
         fatalError("Buffer overrun detected")
       }
       kind = .allocated(count + bytes)
@@ -401,7 +403,7 @@ struct ImageSource: CustomStringConvertible {
               isMappedImage: isMappedImage, path: path)
   }
 
-  /// Initialise with a mapped file
+  /// Initialise with a mapped file (this is currently used by Linux)
   init(path: String) throws {
     self.init(storage: try Storage(path: path),
               isMappedImage: false, path: path)
@@ -409,10 +411,16 @@ struct ImageSource: CustomStringConvertible {
 
   /// Get a sub-range of this ImageSource as an ImageSource
   subscript(range: Range<Address>) -> ImageSource {
-    let intRange = Int(range.lowerBound)..<Int(range.upperBound)
-    return ImageSource(storage: storage[intRange],
-                       isMappedImage: isMappedImage,
-                       path: path)
+    get throws {
+      guard let lowerBound = Int(exactly: range.lowerBound),
+            let upperBound = Int(exactly: range.upperBound),
+            lowerBound <= count, upperBound <= count else {
+        throw ImageSourceError.outOfBoundsRead
+      }
+      return ImageSource(storage: storage[lowerBound..<upperBound],
+                         isMappedImage: isMappedImage,
+                         path: path)
+    }
   }
 
   /// Mark unused bytes in the storage as used
@@ -429,35 +437,54 @@ struct ImageSource: CustomStringConvertible {
 // MemoryReader support
 
 extension ImageSource: MemoryReader {
-  public func fetch(from address: Address,
+  func prefetch(from address: Address, byteCount: Int) throws {
+    guard let offset = Int(exactly: address),
+          bytes.count >= byteCount,
+          offset <= bytes.count - byteCount else {
+      throw ImageSourceError.outOfBoundsRead
+    }
+  }
+
+  func fetch(from address: Address,
                     into buffer: UnsafeMutableRawBufferPointer) throws {
-    let offset = Int(address)
-    guard bytes.count >= buffer.count &&
-            offset <= bytes.count - buffer.count else {
+    guard let offset = Int(exactly: address),
+          bytes.count >= buffer.count &&
+            offset >= 0 && offset <= bytes.count - buffer.count else {
       throw ImageSourceError.outOfBoundsRead
     }
     buffer.copyMemory(from: UnsafeRawBufferPointer(
                         rebasing: bytes[offset..<offset + buffer.count]))
   }
 
-  public func fetch<T>(from address: Address, as type: T.Type) throws -> T {
+  func fetch<T>(from address: Address, as type: T.Type) throws -> T {
     let size = MemoryLayout<T>.size
-    let offset = Int(address)
-    guard offset <= bytes.count - size else {
+    guard let offset = Int(exactly: address),
+            bytes.count >= size &&
+            offset >= 0 && offset <= bytes.count - size else {
       throw ImageSourceError.outOfBoundsRead
     }
     return bytes.loadUnaligned(fromByteOffset: offset, as: type)
   }
 
-  public func fetchString(from address: Address) throws -> String? {
-    let offset = Int(address)
-    let len = strnlen(bytes.baseAddress! + offset, bytes.count - offset)
+  func fetchString(from address: Address) throws
+    -> (String?, consumedBytes: Int) {
+    guard let offset = Int(exactly: address),
+            offset >= 0 && offset <= bytes.count else {
+      throw ImageSourceError.outOfBoundsRead
+    }
+    let maxLen = bytes.count - offset
+    let len = strnlen(bytes.baseAddress! + offset, maxLen)
     let stringBytes = bytes[offset..<offset+len]
-    return String(decoding: stringBytes, as: UTF8.self)
+    return (String(decoding: stringBytes, as: UTF8.self),
+            consumedBytes: len == maxLen ? maxLen : len + 1)
   }
 
-  public func fetchString(from address: Address, length: Int) throws -> String? {
-    let offset = Int(address)
+  func fetchString(from address: Address, length: Int) throws -> String? {
+    guard let offset = Int(exactly: address),
+            bytes.count >= length &&
+            offset >= 0 && offset <= bytes.count - length else {
+      throw ImageSourceError.outOfBoundsRead
+    }
     let stringBytes = bytes[offset..<offset+length]
     return String(decoding: stringBytes, as: UTF8.self)
   }
@@ -505,10 +532,11 @@ struct ImageSourceCursor {
   }
 
   mutating func readString() throws -> String? {
-    guard let result = try source.fetchString(from: pos) else {
+    guard let (result, count) = try? source.fetchString(from: pos),
+          let result else {
       return nil
     }
-    pos += Size(result.utf8.count + 1) // +1 for the NUL
+    pos += Size(count) // +1 for the NUL
     return result
   }
 

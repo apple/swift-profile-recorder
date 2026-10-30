@@ -35,6 +35,7 @@
 #if canImport(Darwin)
 import Darwin
 #elseif os(Windows)
+import WinSDK
 import ucrt
 #elseif canImport(Glibc)
 import Glibc
@@ -42,8 +43,7 @@ import Glibc
 import Musl
 #endif
 
-@_spi(Utils)
-public func hex<T: FixedWidthInteger>(_ value: T,
+func hex<T: FixedWidthInteger>(_ value: T,
                                         prefix shouldPrefix: Bool = true,
                                         width: Int = MemoryLayout<T>.size * 2)
   -> String {
@@ -55,8 +55,7 @@ public func hex<T: FixedWidthInteger>(_ value: T,
   return "\(prefix)\(padding)\(digits)"
 }
 
-@_spi(Utils)
-public func hex(_ bytes: some Sequence<UInt8>) -> String {
+func hex(_ bytes: some Sequence<UInt8>) -> String {
   return bytes.map{ hex($0, prefix: false) }.joined(separator: "")
 }
 
@@ -77,10 +76,107 @@ func pad<T>(_ value: T, _ width: Int, align: PadAlignment = .left) -> String {
   }
 }
 
-#if os(Linux)
-@_spi(Utils)
+func dirname(_ path: String) -> Substring {
+  #if os(Windows)
+  var lastSep: String.Index? = nil
 
-public func readString(from file: String) -> String? {
+  if let lastBackslash = path.lastIndex(of: "\\") {
+    lastSep = lastBackslash
+  }
+  if let lastSlash = path.lastIndex(of: "/") {
+    if lastSep == nil || lastSep! < lastSlash {
+      lastSep = lastSlash
+    }
+  }
+  #else
+  let lastSep = path.lastIndex(of: "/")
+  #endif
+
+  guard let lastSep else {
+    return ""
+  }
+
+  return path.prefix(upTo: lastSep)
+}
+
+func splitpath(_ path: String) -> (Substring, Substring) {
+  #if os(Windows)
+  var lastSep: String.Index? = nil
+
+  if let lastBackslash = path.lastIndex(of: "\\") {
+    lastSep = lastBackslash
+  }
+  if let lastSlash = path.lastIndex(of: "/") {
+    if lastSep == nil || lastSep! < lastSlash {
+      lastSep = lastSlash
+    }
+  }
+  #else
+  let lastSep = path.lastIndex(of: "/")
+  #endif
+
+  guard let lastSep else {
+    return ("", path[...])
+  }
+  let afterSep = path.index(after: lastSep)
+
+  return (path.prefix(upTo: lastSep), path.suffix(from: afterSep))
+}
+
+func realPath(_ path: String) -> String? {
+  #if os(Windows)
+  let hFile: HANDLE = path.withCString(encodedAs: UTF16.self) {
+    return CreateFileW($0,
+                       GENERIC_READ,
+                       DWORD(FILE_SHARE_READ),
+                       nil,
+                       DWORD(OPEN_EXISTING),
+                       DWORD(FILE_ATTRIBUTE_NORMAL),
+                       nil)
+  }
+
+  if hFile == INVALID_HANDLE_VALUE {
+    return nil
+  }
+  defer {
+    CloseHandle(hFile)
+  }
+
+  var bufferSize = 1024
+  var result: String? = nil
+  while result == nil {
+    result = withUnsafeTemporaryAllocation(of: WCHAR.self,
+                                           capacity: 1024) { buffer in
+      let dwRet = GetFinalPathNameByHandleW(hFile,
+                                            buffer.baseAddress,
+                                            DWORD(buffer.count),
+                                            DWORD(VOLUME_NAME_DOS))
+      if dwRet >= bufferSize {
+        bufferSize = Int(dwRet + 1)
+        return nil
+      } else {
+        return String(decoding: buffer[0..<Int(dwRet)], as: UTF16.self)
+      }
+    }
+  }
+
+  return result
+  #else
+  guard let result = realpath(path, nil) else {
+    return nil
+  }
+
+  let s = String(cString: result)
+
+  free(result)
+
+  return s
+  #endif
+}
+
+#if os(Linux)
+
+func readString(from file: String) -> String? {
   let fd = open(file, O_RDONLY, 0)
   if fd < 0 {
     return nil
@@ -106,9 +202,8 @@ public func readString(from file: String) -> String? {
 }
 #endif
 
-@_spi(Utils)
 
-public func stripWhitespace<S: StringProtocol>(_ s: S)
+func stripWhitespace<S: StringProtocol>(_ s: S)
     -> S.SubSequence {
   guard let firstNonWhitespace = s.firstIndex(where: { !$0.isWhitespace })
   else {
@@ -119,8 +214,7 @@ public func stripWhitespace<S: StringProtocol>(_ s: S)
 }
 
 /// Escape a JSON string
-@_spi(Utils)
-public func escapeJSON(_ s: String) -> String {
+func escapeJSON(_ s: String) -> String {
   var result = ""
   let utf8View = s.utf8
   var chunk = utf8View.startIndex
@@ -177,4 +271,26 @@ func notMutable(_ mutable: UnsafeMutableRawPointer) -> UnsafeRawPointer {
 }
 func notMutable(_ immutable: UnsafeRawPointer) -> UnsafeRawPointer {
   return immutable
+}
+
+/// Get the (string) value of an environment variable
+func getEnv(_ variableName: String) -> String? {
+  #if os(Windows)
+  return withUnsafeTemporaryAllocation(of: WCHAR.self, capacity: 4096) { buf in
+    variableName.withCString(encodedAs: UTF16.self) { lpName in
+      let len = GetEnvironmentVariableW(lpName,
+                                        buf.baseAddress,
+                                        DWORD(buf.count))
+      if len == 0 || Int(len) > buf.count {
+        return nil
+      }
+      return String(decoding: buf[..<Int(len)], as: UTF16.self)
+    }
+  }
+  #else
+  if let value = getenv(variableName) {
+    return String(cString: value)
+  }
+  return nil
+  #endif
 }

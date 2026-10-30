@@ -82,76 +82,77 @@ public protocol Symbolizer: Sendable {
     var description: String { get }
 }
 
-enum AnyElfImage {
-    case elf32(Elf32Image)
-    case elf64(Elf64Image)
+/// The symbols for an ELF image, these might come from a separate debug file (see `DefaultSymbolLocator`).
+struct ELFSymbols {
+    var symbols: any SymbolSource
+    var imageName: String
+    /// `Elf32Image`'s `SymbolSource` methods trap if the address doesn't fit into 32 bits.
+    var is32Bit: Bool
 
-    func lookupRealAndInlinedFrames(address: UInt64, logger: Logger) -> [ImageSymbol]? {
-        switch self {
-        case .elf32(let image):
-            guard let realFrame = image.lookupSymbol(address: UInt32(truncatingIfNeeded: address)) else {
-                logger.trace(
-                    "could not find symbol",
-                    metadata: [
-                        "address": "0x\(String(address, radix: 16))",
-                        "image": "\(image)",
-                        "image-name": "\(image.imageName)",
-                        "inline-frames": "\(image.inlineCallSites(at: UInt32(truncatingIfNeeded: address)))",
-                    ]
-                )
-                return nil
-            }
-            var symbols: [ImageSymbol] = []
-            for inlineFrame in image.inlineCallSites(at: UInt32(truncatingIfNeeded: address)) {
-                symbols.append(
-                    ImageSymbol(
-                        name: inlineFrame.name ?? "unknown in \(inlineFrame.filename)",
-                        offset: 0
-                    )
-                )
-            }
-            symbols.append(realFrame)
-            return symbols
-        case .elf64(let image):
-            guard let realFrame = image.lookupSymbol(address: address) else {
-                logger.trace(
-                    "could not find symbol",
-                    metadata: [
-                        "address": "0x\(String(address, radix: 16))",
-                        "image": "\(image)",
-                        "image-name": "\(image.imageName)",
-                        "inline-frames": "\(image.inlineCallSites(at: address))",
-                    ]
-                )
-                return nil
-            }
-
-            var symbols: [ImageSymbol] = []
-            for inlineFrame in image.inlineCallSites(at: address) {
-                symbols.append(
-                    ImageSymbol(
-                        name: inlineFrame.name ?? "unknown in \(inlineFrame.filename)",
-                        offset: 0
-                    )
-                )
-            }
-            symbols.append(realFrame)
-            return symbols
+    static func load(path: String) -> ELFSymbols? {
+        let elfImageCache = ElfImageCache.threadLocal
+        defer {
+            // `DefaultSymbolLocator` loads images through this thread-local cache which would keep them alive (once
+            // per thread) for as long as the thread exists, we have our own cache.
+            elfImageCache.purge()
+        }
+        switch elfImageCache.lookup(path: path) {
+        case .elf32Image(let image):
+            return ELFSymbols(
+                symbols: DefaultSymbolLocator().findSymbols(for: image, format: .elf) ?? image,
+                imageName: image.imageName,
+                is32Bit: true
+            )
+        case .elf64Image(let image):
+            return ELFSymbols(
+                symbols: DefaultSymbolLocator().findSymbols(for: image, format: .elf) ?? image,
+                imageName: image.imageName,
+                is32Bit: false
+            )
+        case .none:
+            return nil
         }
     }
 
-    func sourceLocation(for address: UInt64) throws -> SourceLocation? {
-        switch self {
-        case .elf32(let image):
-            return try image.sourceLocation(for: UInt32(truncatingIfNeeded: address))
-        case .elf64(let image):
-            return try image.sourceLocation(for: address)
+    func lookupRealAndInlinedFrames(address: UInt64, logger: Logger) -> [ImageSymbol]? {
+        let address = self.imageAddress(address)
+        guard let realFrame = self.symbols.lookupSymbol(address: address) else {
+            logger.trace(
+                "could not find symbol",
+                metadata: [
+                    "address": "0x\(String(address, radix: 16))",
+                    "image": "\(self.symbols)",
+                    "image-name": "\(self.imageName)",
+                    "inline-frames": "\(self.symbols.inlineCallSites(at: address))",
+                ]
+            )
+            return nil
         }
+
+        var symbols: [ImageSymbol] = []
+        for inlineFrame in self.symbols.inlineCallSites(at: address) {
+            symbols.append(
+                ImageSymbol(
+                    name: inlineFrame.name ?? "unknown in \(inlineFrame.location.path)",
+                    offset: 0
+                )
+            )
+        }
+        symbols.append(ImageSymbol(name: realFrame.name, offset: realFrame.offset))
+        return symbols
+    }
+
+    func sourceLocation(for address: UInt64) -> SourceLocation? {
+        return self.symbols.sourceLocation(for: self.imageAddress(address))
+    }
+
+    private func imageAddress(_ address: UInt64) -> UInt64 {
+        return self.is32Bit ? UInt64(UInt32(truncatingIfNeeded: address)) : address
     }
 }
 
 internal struct LockedELFSourceCacheReference: @unchecked /* the ElfImage types aren't */ Sendable {
-    private let value: NIOLockedValueBox<[String: AnyElfImage]> = NIOLockedValueBox([:])
+    private let value: NIOLockedValueBox<[String: ELFSymbols]> = NIOLockedValueBox([:])
 
     enum Error: Swift.Error {
         case loadFailed
@@ -166,25 +167,17 @@ internal struct LockedELFSourceCacheReference: @unchecked /* the ElfImage types 
     func lookup(library: DynamicLibMapping, fileVirtualAddressIP: UInt, logger: Logger) -> Result<[ImageSymbol], Error>
     {
         return self.value.withLockedValue { elfSourceCache in
-            var elfImage: AnyElfImage? = elfSourceCache[library.path]
-            if elfImage == nil {
-                if let source = try? ImageSource(path: library.path) {
-                    if let image = try? Elf64Image(source: source) {
-                        elfImage = .elf64(image)
-                    } else if let image = try? Elf32Image(source: source) {
-                        elfImage = .elf32(image)
-                    } else {
-                        elfImage = nil
-                    }
-                }
-                elfSourceCache[library.path] = elfImage
+            var elfSymbols: ELFSymbols? = elfSourceCache[library.path]
+            if elfSymbols == nil {
+                elfSymbols = ELFSymbols.load(path: library.path)
+                elfSourceCache[library.path] = elfSymbols
             }
-            guard let elfImage = elfImage else {
+            guard let elfSymbols = elfSymbols else {
                 return .failure(.loadFailed)
             }
 
             guard
-                let results = elfImage.lookupRealAndInlinedFrames(
+                let results = elfSymbols.lookupRealAndInlinedFrames(
                     address: UInt64(fileVirtualAddressIP),
                     logger: logger
                 )

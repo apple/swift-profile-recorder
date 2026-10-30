@@ -48,11 +48,18 @@ import Musl
 
 #endif
 
-@_spi(MemoryReaders)
+#if os(Linux)
 
-public protocol MemoryReader {
+#endif
+
+
+protocol MemoryReader {
   typealias Address = UInt64
   typealias Size = UInt64
+
+  /// Preflight a fetch of the specified size at the specified location.
+  /// This allows us to trap over-length reads before allocating memory.
+  func prefetch(from address: Address, byteCount: Int) throws
 
   /// Fill the specified buffer with data from the specified location in
   /// the source.
@@ -75,27 +82,49 @@ public protocol MemoryReader {
   func fetch<T>(from addr: Address, as: T.Type) throws -> T
 
   /// Fetch a NUL terminated string from the specified location in the source
-  func fetchString(from addr: Address) throws -> String?
+  func fetchString(from addr: Address) throws -> (String?, consumedBytes: Int)
 
   /// Fetch a fixed-length string from the specified location in the source
   func fetchString(from addr: Address, length: Int) throws -> String?
 }
 
+enum MemoryReaderError: Error {
+  case addressCalculationOverflow
+}
+
 
 extension MemoryReader {
 
-  public func fetch<T>(from address: Address,
+  func prefetch(from address: Address, byteCount: Int) throws {
+    guard let byteCountAsAddr = Address(exactly: byteCount) else {
+      throw MemoryReaderError.addressCalculationOverflow
+    }
+    let (_, overflow) = address.addingReportingOverflow(byteCountAsAddr)
+    if overflow {
+      throw MemoryReaderError.addressCalculationOverflow
+    }
+  }
+
+  func fetch<T>(from address: Address,
                        into buffer: UnsafeMutableBufferPointer<T>) throws {
     try fetch(from: address, into: UnsafeMutableRawBufferPointer(buffer))
   }
 
-  public func fetch<T>(from addr: Address,
+  func fetch<T>(from addr: Address,
                        into pointer: UnsafeMutablePointer<T>) throws {
     try fetch(from: addr,
               into: UnsafeMutableBufferPointer(start: pointer, count: 1))
   }
 
-  public func fetch<T>(from addr: Address, count: Int, as: T.Type) throws -> [T] {
+  func fetch<T>(from addr: Address, count: Int, as: T.Type) throws -> [T] {
+    let (byteCount, overflow)
+      = count.multipliedReportingOverflow(by: MemoryLayout<T>.stride)
+    if overflow {
+      throw MemoryReaderError.addressCalculationOverflow
+    }
+
+    try prefetch(from: addr, byteCount: byteCount)
+
     let array = try Array<T>(unsafeUninitializedCapacity: count){
       buffer, initializedCount in
 
@@ -107,14 +136,14 @@ extension MemoryReader {
     return array
   }
 
-  public func fetch<T>(from addr: Address, as: T.Type) throws -> T {
+  func fetch<T>(from addr: Address, as: T.Type) throws -> T {
     return try withUnsafeTemporaryAllocation(of: T.self, capacity: 1) { buf in
       try fetch(from: addr, into: buf)
       return buf[0]
     }
   }
 
-  public func fetchString(from addr: Address) throws -> String? {
+  func fetchString(from addr: Address) throws -> (String?, consumedBytes: Int) {
     var bytes: [UInt8] = []
     var ptr = addr
     while true {
@@ -126,10 +155,10 @@ extension MemoryReader {
       ptr += 1
     }
 
-    return String(decoding: bytes, as: UTF8.self)
+    return (String(decoding: bytes, as: UTF8.self), consumedBytes: bytes.count)
   }
 
-  public func fetchString(from addr: Address, length: Int) throws -> String? {
+  func fetchString(from addr: Address, length: Int) throws -> String? {
     let bytes = try fetch(from: addr, count: length, as: UInt8.self)
     return String(decoding: bytes, as: UTF8.self)
   }
