@@ -91,9 +91,12 @@ struct ELFSymbols {
 
     static func load(path: String) -> ELFSymbols? {
         let elfImageCache = ElfImageCache.threadLocal
+        assert(elfImageCache.elf32.isEmpty && elfImageCache.elf64.isEmpty)
         defer {
             // `DefaultSymbolLocator` loads images through this thread-local cache which would keep them alive (once
-            // per thread) for as long as the thread exists, we have our own cache.
+            // per thread) for as long as the thread exists, we have our own cache. Purging it (and not using
+            // `DefaultSymbolLocator.shared`) also means that later loads on this thread, which run without our lock,
+            // can't return (and mutate) the images that we already handed out.
             elfImageCache.purge()
         }
         switch elfImageCache.lookup(path: path) {
@@ -152,7 +155,26 @@ struct ELFSymbols {
 }
 
 internal struct LockedELFSourceCacheReference: @unchecked /* the ElfImage types aren't */ Sendable {
-    private let value: NIOLockedValueBox<[String: ELFSymbols]> = NIOLockedValueBox([:])
+    private enum CacheEntry {
+        case loaded(ELFSymbols)
+        /// Cached so that we don't retry the load (and the debug file search) for every address in this image.
+        case loadFailed
+
+        /// Must only be called with the lock held, the lookups mutate the vendored `ElfImage`/`DwarfReader` caches.
+        func lookupRealAndInlinedFrames(address: UInt64, logger: Logger) -> Result<[ImageSymbol], Error> {
+            switch self {
+            case .loaded(let elfSymbols):
+                guard let results = elfSymbols.lookupRealAndInlinedFrames(address: address, logger: logger) else {
+                    return .failure(.lookupFailed)
+                }
+                return .success(results)
+            case .loadFailed:
+                return .failure(.loadFailed)
+            }
+        }
+    }
+
+    private let value: NIOLockedValueBox<[String: CacheEntry]> = NIOLockedValueBox([:])
 
     enum Error: Swift.Error {
         case loadFailed
@@ -166,31 +188,33 @@ internal struct LockedELFSourceCacheReference: @unchecked /* the ElfImage types 
     @available(*, noasync, message: "blocks the calling thread")
     func lookup(library: DynamicLibMapping, fileVirtualAddressIP: UInt, logger: Logger) -> Result<[ImageSymbol], Error>
     {
-        return self.value.withLockedValue { elfSourceCache in
-            var elfSymbols: ELFSymbols? = elfSourceCache[library.path]
-            if elfSymbols == nil {
-                elfSymbols = ELFSymbols.load(path: library.path)
-                elfSourceCache[library.path] = elfSymbols
-            }
-            guard let elfSymbols = elfSymbols else {
-                return .failure(.loadFailed)
-            }
+        let address = UInt64(fileVirtualAddressIP)
+        let cachedResult = self.value.withLockedValue { elfSourceCache in
+            return elfSourceCache[library.path]?.lookupRealAndInlinedFrames(address: address, logger: logger)
+        }
+        if let cachedResult {
+            return cachedResult
+        }
 
-            guard
-                let results = elfSymbols.lookupRealAndInlinedFrames(
-                    address: UInt64(fileVirtualAddressIP),
-                    logger: logger
-                )
-            else {
-                return .failure(.lookupFailed)
+        // Loading (incl. the debug file search) can be slow, so we don't hold the lock, which would block the lookups
+        // in all the other images. Should two threads load the same image concurrently, the first one to insert wins.
+        let loadedEntry = ELFSymbols.load(path: library.path).map(CacheEntry.loaded) ?? .loadFailed
+
+        return self.value.withLockedValue { elfSourceCache in
+            let entry: CacheEntry
+            if let existingEntry = elfSourceCache[library.path] {
+                entry = existingEntry
+            } else {
+                entry = loadedEntry
+                elfSourceCache[library.path] = loadedEntry
             }
-            return .success(results)
+            return entry.lookupRealAndInlinedFrames(address: address, logger: logger)
         }
     }
 }
 
 public final class NativeELFSymboliser: Symbolizer & Sendable {
-    private let elfSourceCache = LockedELFSourceCacheReference()
+    internal let elfSourceCache = LockedELFSourceCacheReference()
 
     public init() {}
 
