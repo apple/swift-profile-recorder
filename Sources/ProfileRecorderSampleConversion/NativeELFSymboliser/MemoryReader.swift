@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2024-2026 Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -48,11 +48,18 @@ import Musl
 
 #endif
 
-@_spi(MemoryReaders)
+#if os(Linux)
 
-public protocol MemoryReader {
+#endif
+
+
+protocol MemoryReader {
   typealias Address = UInt64
   typealias Size = UInt64
+
+  /// Preflight a fetch of the specified size at the specified location.
+  /// This allows us to trap over-length reads before allocating memory.
+  func prefetch(from address: Address, byteCount: Int) throws
 
   /// Fill the specified buffer with data from the specified location in
   /// the source.
@@ -75,27 +82,49 @@ public protocol MemoryReader {
   func fetch<T>(from addr: Address, as: T.Type) throws -> T
 
   /// Fetch a NUL terminated string from the specified location in the source
-  func fetchString(from addr: Address) throws -> String?
+  func fetchString(from addr: Address) throws -> (String?, consumedBytes: Int)
 
   /// Fetch a fixed-length string from the specified location in the source
   func fetchString(from addr: Address, length: Int) throws -> String?
 }
 
+enum MemoryReaderError: Error {
+  case addressCalculationOverflow
+}
+
 
 extension MemoryReader {
 
-  public func fetch<T>(from address: Address,
+  func prefetch(from address: Address, byteCount: Int) throws {
+    guard let byteCountAsAddr = Address(exactly: byteCount) else {
+      throw MemoryReaderError.addressCalculationOverflow
+    }
+    let (_, overflow) = address.addingReportingOverflow(byteCountAsAddr)
+    if overflow {
+      throw MemoryReaderError.addressCalculationOverflow
+    }
+  }
+
+  func fetch<T>(from address: Address,
                        into buffer: UnsafeMutableBufferPointer<T>) throws {
     try fetch(from: address, into: UnsafeMutableRawBufferPointer(buffer))
   }
 
-  public func fetch<T>(from addr: Address,
+  func fetch<T>(from addr: Address,
                        into pointer: UnsafeMutablePointer<T>) throws {
     try fetch(from: addr,
               into: UnsafeMutableBufferPointer(start: pointer, count: 1))
   }
 
-  public func fetch<T>(from addr: Address, count: Int, as: T.Type) throws -> [T] {
+  func fetch<T>(from addr: Address, count: Int, as: T.Type) throws -> [T] {
+    let (byteCount, overflow)
+      = count.multipliedReportingOverflow(by: MemoryLayout<T>.stride)
+    if overflow {
+      throw MemoryReaderError.addressCalculationOverflow
+    }
+
+    try prefetch(from: addr, byteCount: byteCount)
+
     let array = try Array<T>(unsafeUninitializedCapacity: count){
       buffer, initializedCount in
 
@@ -107,14 +136,14 @@ extension MemoryReader {
     return array
   }
 
-  public func fetch<T>(from addr: Address, as: T.Type) throws -> T {
+  func fetch<T>(from addr: Address, as: T.Type) throws -> T {
     return try withUnsafeTemporaryAllocation(of: T.self, capacity: 1) { buf in
       try fetch(from: addr, into: buf)
       return buf[0]
     }
   }
 
-  public func fetchString(from addr: Address) throws -> String? {
+  func fetchString(from addr: Address) throws -> (String?, consumedBytes: Int) {
     var bytes: [UInt8] = []
     var ptr = addr
     while true {
@@ -126,11 +155,38 @@ extension MemoryReader {
       ptr += 1
     }
 
-    return String(decoding: bytes, as: UTF8.self)
+    return (String(decoding: bytes, as: UTF8.self), consumedBytes: bytes.count)
   }
 
-  public func fetchString(from addr: Address, length: Int) throws -> String? {
+  func fetchString(from addr: Address, length: Int) throws -> String? {
     let bytes = try fetch(from: addr, count: length, as: UInt8.self)
     return String(decoding: bytes, as: UTF8.self)
   }
 }
+
+
+struct UnsafeLocalMemoryReader: MemoryReader {
+  init() {}
+
+  func fetch(from address: Address,
+                    into buffer: UnsafeMutableRawBufferPointer) throws {
+    buffer.baseAddress!.copyMemory(
+      from: UnsafeRawPointer(bitPattern: UInt(address))!,
+      byteCount: buffer.count
+    )
+  }
+
+  func fetch<T>(from address: Address, as type: T.Type) throws -> T {
+    let ptr = UnsafeRawPointer(bitPattern: UInt(address))!
+    return ptr.loadUnaligned(fromByteOffset: 0, as: type)
+  }
+
+  func fetchString(from address: Address) throws -> (String?, consumedBytes: Int) {
+    let ptr = UnsafeRawPointer(bitPattern: UInt(address))!
+    guard let str = String(validatingUTF8: ptr.assumingMemoryBound(to: CChar.self)) else {
+      return (nil, 0)
+    }
+    return (str, consumedBytes: str.utf8.count)
+  }
+}
+

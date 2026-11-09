@@ -20,5 +20,6 @@ cd "$here"
 config="${1:-release}"
 
 echo "Building: ${config}"
-swift build -Xswiftc "-sanitize=fuzzer,address" -Xswiftc -parse-as-library -Xswiftc -enable-testing -c "${config}" --product FuzzELF
+# rdar://191393091
+swift build --build-system native -Xswiftc "-sanitize=fuzzer,address" -Xswiftc -parse-as-library -Xswiftc -enable-testing -c "${config}" --product FuzzELF
 echo "Binary: $here/.build/${config}/FuzzELF"

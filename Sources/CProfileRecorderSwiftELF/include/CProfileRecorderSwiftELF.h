@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2024-2026 Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -18,7 +18,7 @@
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2021-2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2021-2026 Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -34,5 +34,10 @@
 #include "swipr-elf.h"
 #include "swipr-eh_frame_hdr.h"
 #include "swipr-dwarf.h"
+#include "swipr-pe-coff.h"
+#include "swipr-codeview.h"
+#include "swipr-pdb.h"
+#include "swipr-Compression.h"
+#include "swipr-Libc.h"
 
 #endif
