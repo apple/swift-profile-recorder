@@ -3,7 +3,7 @@
 ##
 ## This source file is part of the Swift Profile Recorder open source project
 ##
-## Copyright (c) 2024 Apple Inc. and the Swift Profile Recorder project authors
+## Copyright (c) 2024-2026 Apple Inc. and the Swift Profile Recorder project authors
 ## Licensed under Apache License v2.0
 ##
 ## See LICENSE.txt for license information
@@ -19,6 +19,9 @@ here="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 swift_root=${1:-$here/../../swift}
 backtracing_root="$swift_root"/stdlib/public/RuntimeModule
 prefix=${2:-SWIPR}
+# The git revision whose copyright headers tell us when we started vendoring each file
+copyright_base_rev=${3:-HEAD}
+year=$(date +%Y)
 
 function die() {
     echo "ERROR: $*"
@@ -35,12 +38,12 @@ desc=$(cd "$backtracing_root" && git describe --abbrev --dirty)
 rm -rf "$target_c_src" "$target_swift_src"
 mkdir -p "$target_c_src/include"
 mkdir -p "$target_swift_src"
-cat > "$target_c_src/empty.c" <<"EOF"
+cat > "$target_c_src/empty.c" <<EOF
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2021-2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2021-${year} Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -53,16 +56,46 @@ EOF
 
 cp "$backtracing_root"/modules/ImageFormats/Elf/*.h "$target_c_src/include/"
 cp "$backtracing_root"/modules/ImageFormats/Dwarf/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/ImageFormats/PeCoff/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/ImageFormats/CodeView/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/ImageFormats/PDB/*.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/Compression.h "$target_c_src/include/"
+cp "$backtracing_root"/modules/OS/Libc.h "$target_c_src/include/"
 for f in "$target_c_src/include"/*.h; do
-    mv "$f" "$(dirname "$f")/swipr-$(basename "$f")"
+    # Some headers are only ever compiled as C++ upstream, guard their namespaces and add typedefs for their enums
+    # so they also work as C
+    awk '
+    /^(namespace swift \{|\} \/\/ namespace runtime)$/ && prev != "#ifdef __cplusplus" {
+        print "#ifdef __cplusplus"
+        print
+        getline
+        print
+        print "#endif"
+        prev = "#endif"
+        next
+    }
+    /^PE_ENUM\([^,]+, [a-z_]+\) \{$/ {
+        enum_name = $2
+        sub(/\)$/, "", enum_name)
+    }
+    enum_name != "" && /^};$/ {
+        print
+        print "typedef enum " enum_name " " enum_name ";"
+        enum_name = ""
+        prev = ""
+        next
+    }
+    { print; prev = $0 }
+    ' "$f" > "$(dirname "$f")/swipr-$(basename "$f")"
+    rm "$f"
 done
 
-cat > "$target_c_src/include/CProfileRecorderSwiftELF.h" <<"EOF"
+cat > "$target_c_src/include/CProfileRecorderSwiftELF.h" <<EOF
 //===----------------------------------------------------------------------===//
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2021-2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2021-${year} Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -78,31 +111,55 @@ cat > "$target_c_src/include/CProfileRecorderSwiftELF.h" <<"EOF"
 #include "swipr-elf.h"
 #include "swipr-eh_frame_hdr.h"
 #include "swipr-dwarf.h"
+#include "swipr-pe-coff.h"
+#include "swipr-codeview.h"
+#include "swipr-pdb.h"
+#include "swipr-Compression.h"
+#include "swipr-Libc.h"
 
 #endif
 EOF
 
 swift_files=(
+    AggregatingSymbolSource.swift
+    BacktracerThreadLocals.swift
     ByteSwapping.swift
+    Compression.swift
+    DefaultSymbolLocator.swift
     Dwarf.swift
     Elf.swift
+    ElfImageCache.swift
     Image.swift
     ImageSource.swift
+    Libc.swift
     MemoryReader.swift
+    PDBCache.swift
+    PeCoff.swift
+    PeImageCache.swift
     Registers.swift
+    SymbolLocator.swift
     Utils.swift
 )
 
 for f in "${swift_files[@]}"; do
     cp "$backtracing_root/$f" "$target_swift_src"
 done
+mkdir -p "$target_swift_src/PDB"
+cp "$backtracing_root"/PDB/*.swift "$target_swift_src/PDB"
+# The PDB code needs Swift 6.4 (`unsafe` expressions, `Span(viewing:)`), older compilers get the stubs in
+# ProfileRecorderAddtions+Types.swift (PDB files are only used on Windows anyway)
+for f in "$target_swift_src"/PDB/*.swift "$target_swift_src/PDBCache.swift"; do
+    { echo "#if compiler(>=6.4)"; cat "$f"; echo "#endif"; } > "$f.tmp" && mv "$f.tmp" "$f"
+done
 echo "$desc" > "$here/../Misc/vendored-backtracing_root.version"
 
-vendored_file_text='//===----------------------------------------------------------------------===//
+function vendored_file_text() {
+    cat <<EOF
+//===----------------------------------------------------------------------===//
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) $1 Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -113,7 +170,9 @@ vendored_file_text='//===-------------------------------------------------------
 //===----------------------------------------------------------------------===//
 // This file has been adjusted for ProfileRecorder, originally of the Swift.org open source project
 // swift-format-ignore-file
-'
+
+EOF
+}
 
 find "$target_c_src" "$target_swift_src" \
     -type f \
@@ -148,6 +207,12 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/\<STN_/internal_${prefix}_STN_/g" \
         -e "s/\<STT_/internal_${prefix}_STT_/g" \
         -e "s/\<STV_/internal_${prefix}_STV_/g" \
+        -e "s/\<z_stream(_s|p)?\>/${prefix}_z_stream\1/g" \
+        -e "s/\<(Z_OK|Z_STREAM_END|Z_NO_FLUSH|ZLIB_VERSION)\>/internal_${prefix}_\1/g" \
+        -e "s/\<ZSTD_(in|out)Buffer(_s)?\>/${prefix}_ZSTD_\1Buffer\2/g" \
+        -e "s/\<lzma_(ret|action|allocator|internal|internal_s|reserved_enum|stream)\>/${prefix}_lzma_\1/g" \
+        -e "s/\<LZMA_/internal_${prefix}_LZMA_/g" \
+        -e "s/\<(lzma|zlib)_stream_init\>/${prefix}_\1_stream_init/g" \
         -e "s/@available(.*)//g" \
         -e "s/import Swift//g" \
         -e "s/^let ELF64_/nonisolated(unsafe) let ELF64_/g" \
@@ -158,12 +223,15 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/internal import BacktracingImpl.Runtime//g" \
         -e "s/internal import BacktracingImpl.ImageFormats.Elf/import CProfileRecorderSwiftELF/g" \
         -e "s/internal import BacktracingImpl.OS.Darwin//g" \
+        -e "s/internal import BacktracingImpl.OS.SafeReadMemory//g" \
+        -e "s/@_implementationOnly import BacktracingImpl\.(ImageFormats\.[A-Za-z]+|CompressionLibs|OS\.Libc)$/import CProfileRecorderSwiftELF/g" \
+        -e "s/@_implementationOnly import BacktracingImpl\.(OS\.[A-Za-z]+|Runtime)$//g" \
+        -e "s/swift\.runtime\.backtrace\./CProfileRecorderSwiftELF./g" \
         -e "s/swift\.runtime\./CProfileRecorderSwiftELF./g" \
         -e "s/internal import/import/g" \
-        -e "s/_swift_open/open/g" \
-        -e "s/_swift_get_errno\(\)/errno/g" \
+        -e "s/\<_swift_(open|get_errno|set_errno)\>/${prefix}_swift_\1/g" \
         -e "s/mach_task_self\(\)/mach_task_self_/g" \
-        -e "s/typealias SourceLocation = SymbolicatedBacktrace.SourceLocation//g" \
+        -e "s/SymbolicatedBacktrace\.SourceLocation/_ProfileRecorderSampleConversion.SourceLocation/g" \
         -e "s/@_specialize\(kind: full, where R == RemoteMemoryReader\)//g" \
         -e "s/@_specialize\(kind: full, where R == MemserverMemoryReader\)//g" \
         -e "s/@_specialize\(kind: full, where R == RemoteMemoryReader, Traits == Elf32Traits\)//g" \
@@ -174,86 +242,70 @@ find "$target_c_src" "$target_swift_src" \
         -e "s/@_specialize\(kind: full, where R == UnsafeLocalMemoryReader, Traits == Elf32Traits\)//g" \
         -e "s/@_specialize\(kind: full, where R == UnsafeLocalMemoryReader, Traits == Elf64Traits\)//g" \
         -e "s/^#if os\(macOS\) \|\| os\(iOS\) \|\| os\(tvOS\) \|\| os\(watchOS\)$/#if canImport(Darwin)/g" \
-        -e "1s%^%$(echo "$vendored_file_text" | tr '\n' '%' | sed 's/%/\\n/g')%" \
+        -e "s/^#if os\(anyAppleOS\)$/#if canImport(Darwin)/g" \
+        -e "s/[[:space:]]+$//" \
+        -e "s/\<SWIFT_([A-Z0-9_]+_H_?)\>/${prefix}_SWIFT_\1/g" \
         '{}' \;
 
-# Comment out compression-related code in Elf.swift (unsupported features)
-elf_swift="$target_swift_src/Elf.swift"
+# vendor-core-symbolication-symbolizer.sh makes CoreSymbolication.swift's `Sym` internal, which clashes with this one
+gsed -ri "s/\<Sym\>/CompressionSym/g" "$target_swift_src/Compression.swift"
 
+# Comment out the Backtrace.Image conformance (Backtrace is not vendored),
+# including the attribute line in front of it
+symbol_locator="$target_swift_src/SymbolLocator.swift"
 awk '
-# Comment out .gnu_debugdata block
-/if let debugData = getSection\("\.gnu_debugdata"\)/ {
-    print "/*"
-    in_debugdata = 1
-    brace_count = 0
-}
-in_debugdata {
-    print
-    brace_count += gsub(/{/, "{")
-    brace_count -= gsub(/}/, "}")
-    if (brace_count == 0) {
-        print "*/"
-        in_debugdata = 0
+pending != "" {
+    if (/^extension Backtrace\.Image: /) {
+        print "/*"
+        in_backtrace_image = 1
     }
+    print pending
+    pending = ""
+}
+/^@/ && !in_backtrace_image {
+    pending = $0
     next
 }
-
-# Replace elfCompressedImageSource with () // compression unsupported
-/return try ImageSource\(elfCompressedImageSource:/ {
-    print "              () // compression unsupported"
-    getline  # skip the traits: line
-    next
-}
-
-# Comment out zname == sname block
-/if zname == sname \{/ {
-    print "/*"
-    in_zname = 1
-    zname_brace = 0
-}
-in_zname {
+in_backtrace_image && /^}$/ {
     print
-    zname_brace += gsub(/{/, "{")
-    zname_brace -= gsub(/}/, "}")
-    if (zname_brace == 0) {
-        print "*/"
-        in_zname = 0
-    }
+    print "*/"
+    in_backtrace_image = 0
     next
 }
-
-# Comment out CompressedImageSourceError catch blocks (keep the } before catch)
-/\} catch let CompressedImageSourceError\.libraryNotFound/ {
-    print "      }"
-    print "/*"
-    print "      catch let CompressedImageSourceError.libraryNotFound(library) {"
-    in_catch = 1
-    next
-}
-in_catch {
-    print
-    if (/\} catch \{/) {
-        prev_was_catch_open = 1
-    } else if (/^[[:space:]]*\}[[:space:]]*$/ && prev_was_catch_open) {
-        print "*/"
-        in_catch = 0
-        prev_was_catch_open = 0
-    } else {
-        prev_was_catch_open = 0
-    }
-    next
-}
-
 { print }
-' "$elf_swift" > "$elf_swift.tmp" && mv "$elf_swift.tmp" "$elf_swift"
+END { if (pending != "") print pending }
+' "$symbol_locator" > "$symbol_locator.tmp" && mv "$symbol_locator.tmp" "$symbol_locator"
 
-# Truncate MemoryReader.swift - remove new platform-specific memory readers
-# Keep only up to the end of "extension MemoryReader { ... }"
+# Nothing outside the vendored code uses its (SPI) public API, make it internal so that upstream API changes don't
+# show up as API breakages of _ProfileRecorderSampleConversion
+find "$target_swift_src" -name '*.swift' -exec gsed -ri \
+    -e '/^[[:space:]]*@_spi\([A-Za-z]+\)[[:space:]]*$/d' \
+    -e 's/@_spi\([A-Za-z]+\)[[:space:]]+//g' \
+    -e 's/\<public[[:space:]]+//g' \
+    -e 's/\<open[[:space:]]+(class|func|var|subscript)\>/\1/g' \
+    '{}' \;
+
+# Truncate MemoryReader.swift - remove the platform-specific memory readers
+# Keep everything up to the first #if after "extension MemoryReader { ... }"
 memory_reader="$target_swift_src/MemoryReader.swift"
 awk '
 /^extension MemoryReader/ { in_extension = 1 }
-in_extension && /^}$/ { print; exit }
+after_extension && /^#if / { exit }
+in_extension && /^}$/ { in_extension = 0; after_extension = 1 }
 { print }
 ' "$memory_reader" > "$memory_reader.tmp" && mv "$memory_reader.tmp" "$memory_reader"
+
+# Prepend our header. Files we already vendored keep the first year of their existing header, new files get
+# this year.
+find "$target_c_src" "$target_swift_src" -type f | while read -r f; do
+    first_year=$(git -C "$here/.." show "$copyright_base_rev:${f#"$here/../"}" 2>/dev/null \
+        | grep -m1 -oE 'Copyright \(c\) [0-9]{4}' | grep -oE '[0-9]{4}' || true)
+    if [ -z "$first_year" ] || [ "$first_year" = "$year" ]; then
+        years=$year
+    else
+        years="$first_year-$year"
+    fi
+    { vendored_file_text "$years"; cat "$f"; } > "$f.tmp" && mv "$f.tmp" "$f"
+done
 
 echo "Okay, all done."

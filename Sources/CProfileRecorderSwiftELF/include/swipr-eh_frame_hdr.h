@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2024-2026 Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -33,8 +33,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SWIFT_EH_FRAME_HDR_H
-#define SWIFT_EH_FRAME_HDR_H
+#ifndef SWIPR_SWIFT_EH_FRAME_HDR_H
+#define SWIPR_SWIFT_EH_FRAME_HDR_H
 
 #include <inttypes.h>
 
@@ -84,4 +84,4 @@ typedef EH_FRAME_OPTIONS(uint8_t, EHFrameEncoding) {
 } // namespace SWIPRswift
 #endif
 
-#endif // SWIFT_EH_FRAME_HDR_H
+#endif // SWIPR_SWIFT_EH_FRAME_HDR_H

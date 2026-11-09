@@ -2,7 +2,7 @@
 //
 // This source file is part of the Swift Profile Recorder open source project
 //
-// Copyright (c) 2024 Apple Inc. and the Swift Profile Recorder project authors
+// Copyright (c) 2024-2026 Apple Inc. and the Swift Profile Recorder project authors
 // Licensed under Apache License v2.0
 //
 // See LICENSE.txt for license information
@@ -33,8 +33,8 @@
 //
 //===----------------------------------------------------------------------===//
 
-#ifndef SWIFT_ELF_H
-#define SWIFT_ELF_H
+#ifndef SWIPR_SWIFT_ELF_H
+#define SWIPR_SWIFT_ELF_H
 
 #include <inttypes.h>
 
