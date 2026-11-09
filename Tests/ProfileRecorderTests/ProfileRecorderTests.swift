@@ -18,6 +18,7 @@ import NIO
 import NIOConcurrencyHelpers
 import Logging
 import _NIOFileSystem
+import SystemPackage
 @testable import ProfileRecorder
 import _ProfileRecorderSampleConversion
 
@@ -413,28 +414,85 @@ final class ProfileRecorderTests: XCTestCase {
             return
         }
 
-        // 0: waits in A, 1: moves to B, 2: exits.
-        let stage = ConditionLock(value: 0)
-        defer {
-            stage.lock()
-            stage.unlock(withValue: 2)
+        // Nothing holds the request back until the move, so on a loaded machine it can finish first.
+        try await FileSystem.shared.withTemporaryDirectory { _, directory in
+            for attempt in 1...100 {
+                let path = directory.appending("samples-\(attempt).samples")
+                if let stacks = try await self.moverStacksAroundMove(attempt: attempt, path: path) {
+                    XCTAssertNotEqual(
+                        stacks.inA,
+                        stacks.afterLeavingA,
+                        "the stack after the move repeats the one before"
+                    )
+                    return
+                }
+                self.logger.notice(
+                    "the request finished before the mover was sampled after leaving A, retrying",
+                    metadata: ["attempt": "\(attempt)"]
+                )
+            }
+            XCTFail("the request finished before the mover was sampled after leaving A in all 100 attempts")
         }
+    }
+
+    /// The mover's stack waiting in A and one taken after it left A, `nil` if the request finished too early for that.
+    private func moverStacksAroundMove(
+        attempt: Int,
+        path: FilePath
+    ) async throws -> (inA: [Substring], afterLeavingA: [Substring])? {
+        // 0: waits in A, 1: leaves A, 2: has left A, 3: leaves B.
+        let stage = ConditionLock(value: 0)
+        func leaveA() {
+            stage.lock()
+            stage.unlock(withValue: 1)
+            stage.lock(whenValue: 2)
+            stage.unlock()
+        }
+        var hasLeftA = false
+        defer {
+            if !hasLeftA {
+                leaveA()
+            }
+            stage.lock()
+            stage.unlock(withValue: 3)
+        }
+        // The mover of an earlier attempt may still be exiting.
+        let moverName = "swipr-mover-\(attempt)"
         Thread.detachNewThread {
-            setCurrentThreadName("swipr-mover")
+            setCurrentThreadName(moverName)
             SWIPR_WAIT_A(stage)
             SWIPR_WAIT_B(stage)
         }
 
-        let path = "\(self.tempDirectory!)/samples.samples"
+        // Blocking, unlike NIOFileSystem's reads: the polls are on the way to the move.
         func moverStacks() throws -> [[Substring]] {
-            // String(contentsOfFile:) on Linux can trap reading a file the sampler is still appending to.
-            let data = FileHandle(forReadingAtPath: path)?.readDataToEndOfFile() ?? Data()
-            let text = String(decoding: data, as: UTF8.self)
+            let file = try FileDescriptor.open(path, .readOnly)
+            let text = try file.closeAfter {
+                // The sampler may still be appending; everything it wrote before the seek is enough.
+                let size = try file.seek(offset: 0, from: .end)
+                guard size <= 32 << 20 else {
+                    throw Errno.fileTooLarge
+                }
+                return try String(unsafeUninitializedCapacity: Int(size)) { buffer in
+                    var count = 0
+                    while count < buffer.count {
+                        let read = try file.read(
+                            fromAbsoluteOffset: Int64(count),
+                            into: UnsafeMutableRawBufferPointer(buffer.extracting(count...))
+                        )
+                        guard read > 0 else {
+                            break
+                        }
+                        count += read
+                    }
+                    return count
+                }
+            }
             var stacks: [[Substring]] = []
             var current: [Substring]? = nil
             for line in text.split(separator: "\n") {
                 if line.hasPrefix("[SWIPR] SMPL") {
-                    current = line.contains(#""name": "swipr-mover""#) ? [] : nil
+                    current = line.contains(#""name": "\#(moverName)""#) ? [] : nil
                 } else if line.hasPrefix("[SWIPR] STCK") {
                     current?.append(line)
                 } else if line.hasPrefix("[SWIPR] DONE"), let stack = current {
@@ -445,29 +503,39 @@ final class ProfileRecorderTests: XCTestCase {
             return stacks
         }
 
-        // The move lands mid-request, after the mover was sampled waiting in A, so a repeated stack would show A again.
-        let request = Task {
-            try await ProfileRecorderSampler.sharedInstance.requestSamples(
-                outputFilePath: path,
-                count: 60,
-                timeBetweenSamples: .microseconds(500)
-            )
+        let request = ProfileRecorderSampler.sharedInstance.requestSamples(
+            outputFilePath: path.string,
+            count: 100,
+            timeBetweenSamples: .milliseconds(2),
+            eventLoop: self.group.next()
+        )
+        let requestDone = ManagedAtomic(false)
+        request.whenComplete { _ in
+            requestDone.store(true, ordering: .relaxed)
         }
-        let deadline = DispatchTime.now() + .seconds(5)
-        while try moverStacks().count < 5 {
-            if DispatchTime.now() > deadline {
-                _ = try? await request.value
-                XCTFail("mover sampled \(try moverStacks().count) times, needs 5")
-                return
+
+        // The same stack twice in a row is the mover waiting in A; on Darwin the second is usually the stored one.
+        var stacks = try moverStacks()
+        while stacks.count < 2 || stacks[stacks.count - 2] != stacks[stacks.count - 1] {
+            if requestDone.load(ordering: .relaxed) {
+                try await request.get()
+                return nil
             }
             try await Task.sleep(nanoseconds: 100_000)
+            stacks = try moverStacks()
         }
-        stage.lock()
-        stage.unlock(withValue: 1)
-        try await request.value
+        let stackInA = stacks[stacks.count - 1]
 
-        let stacks = try moverStacks()
-        XCTAssertNotEqual(stacks.first, stacks.last, "the stack after the move repeats the one before")
+        leaveA()
+        hasLeftA = true
+        // Only the tick in flight now can have started before the mover left A.
+        let stackCountWhenLeftA = try moverStacks().count
+        try await request.get()
+        stacks = try moverStacks()
+        guard stacks.count >= stackCountWhenLeftA + 2 else {
+            return nil
+        }
+        return (stackInA, stacks[stacks.count - 1])
     }
 
     func testCPUModeSkipsWaitingThreads() async throws {
@@ -834,12 +902,12 @@ func SWIPR_BURST_SPIN(microseconds: Int) {
 @inline(never)
 func SWIPR_WAIT_A(_ stage: ConditionLock<Int>) {
     stage.lock(whenValue: 1)
-    stage.unlock()
+    stage.unlock(withValue: 2)
 }
 
 @inline(never)
 func SWIPR_WAIT_B(_ stage: ConditionLock<Int>) {
-    stage.lock(whenValue: 2)
+    stage.lock(whenValue: 3)
     stage.unlock()
 }
 
