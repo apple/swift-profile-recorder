@@ -30,6 +30,7 @@ let package = Package(
             .package(url: "https://github.com/apple/swift-nio.git", from: "2.99.0"),
             .package(url: "https://github.com/apple/swift-nio-extras.git", from: "1.24.1"),
             .package(url: "https://github.com/apple/swift-protobuf.git", from: "1.31.1"),
+            .package(url: "https://github.com/apple/swift-system.git", from: "1.4.0"),
             .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.25.2"),
         ]
         #if compiler(>=6.2)
@@ -152,6 +153,7 @@ let package = Package(
                 .product(name: "NIO", package: "swift-nio"),
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "_NIOFileSystem", package: "swift-nio"),
+                .product(name: "SystemPackage", package: "swift-system"),
             ]
         ),
         .testTarget(
