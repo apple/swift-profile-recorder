@@ -852,13 +852,13 @@ final class ProfileRecorderTests: XCTestCase {
         let blockerDone = DispatchSemaphore(value: 0)
 
         let spinner = Thread {
-            Thread.current.name = "swipr-spin"
+            setCurrentThreadName("swipr-spin")
             spinnerReady.signal()
             while keepSpinning.load(ordering: .relaxed) {}
             spinnerDone.signal()
         }
         let blocker = Thread {
-            Thread.current.name = "swipr-block"
+            setCurrentThreadName("swipr-block")
             blockerReady.signal()
             blockerUnblock.wait()
             blockerDone.signal()
