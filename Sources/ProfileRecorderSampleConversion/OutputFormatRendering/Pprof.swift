@@ -29,7 +29,11 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         let symbolisedStack = try sample.stack.map { frame in
             try symbolizer.symbolise(frame)
         }
-        let threadInfo = SampleAggregator.ThreadInfo(tid: sample.tid, name: sample.threadName)
+        let threadInfo = SampleAggregator.ThreadInfo(
+            tid: sample.tid,
+            name: sample.threadName,
+            state: sample.threadState
+        )
         self.aggregator.add(symbolisedStack, threadInfo: threadInfo)
         return ByteBuffer()
     }
@@ -54,8 +58,16 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         // Thread label string table entries
         let threadIDKeyID = stringTable.addAndGetID("thread_id", type: StringWithID.self)
         let threadNameKeyID = stringTable.addAndGetID("thread_name", type: StringWithID.self)
+        // Only added when some sample has a state, so profiles without one are unchanged.
+        var threadStateKeyID: Int? = nil
         for sampleKey in self.aggregator.samples.keys {
             _ = stringTable.addAndGetID(sampleKey.threadInfo.name, type: StringWithID.self)
+            if let state = sampleKey.threadInfo.state {
+                if threadStateKeyID == nil {
+                    threadStateKeyID = stringTable.addAndGetID("thread_state", type: StringWithID.self)
+                }
+                _ = stringTable.addAndGetID(state, type: StringWithID.self)
+            }
         }
 
         let profile = Perftools_Profiles_Profile.with { profile in
@@ -102,6 +114,18 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                             }
                         },
                     ]
+                    if let state = sampleKey.threadInfo.state {
+                        if let threadStateKeyID, let entry = stringTable[state] {
+                            outSample.label.append(
+                                Perftools_Profiles_Label.with {
+                                    $0.key = Int64(threadStateKeyID)
+                                    $0.str = Int64(entry.id)
+                                }
+                            )
+                        } else {
+                            assertionFailure("thread state '\(state)' missing from string table")
+                        }
+                    }
                 }
             }
             profile.periodType = Perftools_Profiles_ValueType.with {

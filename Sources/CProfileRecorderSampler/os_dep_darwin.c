@@ -284,6 +284,19 @@ int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_thre
     return 0;
 }
 
+#if TARGET_OS_OSX || TARGET_OS_IOS
+static enum swipr_thread_state swipr_thread_state_from_run_state(integer_t run_state) {
+    switch (run_state) {
+        case TH_STATE_RUNNING: return swipr_thread_state_running;
+        case TH_STATE_STOPPED: return swipr_thread_state_stopped;
+        case TH_STATE_WAITING: return swipr_thread_state_waiting;
+        case TH_STATE_UNINTERRUPTIBLE: return swipr_thread_state_uninterruptible;
+        case TH_STATE_HALTED: return swipr_thread_state_halted;
+        default: return swipr_thread_state_unknown;
+    }
+}
+#endif
+
 void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_threads, struct swipr_minidump *minidumps,
                                  struct timespec start_time, enum swipr_sampling_mode mode) {
 #if TARGET_OS_OSX || TARGET_OS_IOS
@@ -308,6 +321,7 @@ void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_thr
         if (mode == SWIPR_SAMPLING_CPU && info.pth_run_state != TH_STATE_RUNNING) {
             continue;
         }
+        enum swipr_thread_state thread_state = swipr_thread_state_from_run_state(info.pth_run_state);
         uint64_t cpu_ns = info.pth_user_time + info.pth_system_time;
         // A waiting thread whose CPU time has not moved has not run since its last unwind, so its stack is unchanged.
         if (minidumps[i].md_last_tid == all_threads[i].ti_id && info.pth_run_state == TH_STATE_WAITING
@@ -315,6 +329,7 @@ void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_thr
             minidumps[i].md_tid = all_threads[i].ti_id;
             minidumps[i].md_time = start_time;
             strcpy(minidumps[i].md_thread_name, all_threads[i].ti_name);
+            minidumps[i].md_thread_state = thread_state;
             continue;
         }
         minidumps[i].md_last_cpu_ns = cpu_ns;
@@ -363,7 +378,7 @@ void swipr_os_dep_sample_threads(size_t num_threads, struct thread_info *all_thr
         g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context.sfuctx_ip = 0;
 #endif
         if (kret == KERN_SUCCESS) {
-            swipr_sampler_unwind_thread(i, &minidumps[i], all_threads[i].ti_name, start_time);
+            swipr_sampler_unwind_thread(i, &minidumps[i], all_threads[i].ti_name, thread_state, start_time);
         } else {
             // Usually the thread exited after thread_suspend, but XNU also returns KERN_ABORTED for a live thread.
             all_threads[i].ti_id = 0;

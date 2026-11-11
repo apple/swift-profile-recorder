@@ -36,6 +36,10 @@ public struct Sample {
         return self.sampleHeader.name
     }
 
+    public var threadState: String? {
+        return self.sampleHeader.state
+    }
+
     public init(sampleHeader: SampleHeader, stack: [StackFrame]) {
         self.sampleHeader = sampleHeader
         self.stack = stack

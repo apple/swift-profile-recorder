@@ -140,6 +140,7 @@ public struct SampleHeader: Codable {
     var name: String
     var timeSec: Int
     var timeNSec: Int
+    var state: String?
 }
 
 public struct StackFrame: Codable & Sendable & CustomStringConvertible & Hashable {
