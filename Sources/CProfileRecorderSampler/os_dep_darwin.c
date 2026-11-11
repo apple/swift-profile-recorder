@@ -248,10 +248,10 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
         }
         usleep(sleep_time);
         struct timespec current_time = swipr_sampler_get_current_time();
-        float duration = (current_time.tv_sec - start_time.tv_sec) +
-                         (current_time.tv_nsec - start_time.tv_nsec) / 1e9f;
+        float elapsed_seconds = (current_time.tv_sec - start_time.tv_sec) +
+                                (current_time.tv_nsec - start_time.tv_nsec) / 1e9f;
         
-        if (duration > 1.0f) {
+        if (elapsed_seconds > 1.0f) {
             // abandon thread
             UNSAFE_DEBUG("Thread timed out during suspension \n");
             return 1;
