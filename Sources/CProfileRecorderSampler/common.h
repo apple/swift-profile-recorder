@@ -41,4 +41,26 @@
 
 #define SWIPR_MIN(a, b) ((a) < (b) ? (a) : (b))
 
+// Scheduler state of a sampled thread, named the same on Linux and Darwin. Linux reads it from
+// /proc/self/task/<tid>/stat when the thread list is built (right before signalling in CPU mode); Darwin from the
+// mach run_state, just before the thread is suspended.
+enum swipr_thread_state {
+    swipr_thread_state_unknown = 0,     // not read: never set, or the read failed
+    swipr_thread_state_running,         // Linux R, Darwin RUNNING: on a CPU or runnable
+    swipr_thread_state_waiting,         // Linux S, Darwin WAITING: interruptible wait (lock, condvar, poll, sleep)
+    swipr_thread_state_uninterruptible, // Linux D, Darwin UNINTERRUPTIBLE: uninterruptible kernel wait, usually I/O
+    swipr_thread_state_other,           // read, but none of the above: stopped, traced, exiting, kernel-only
+};
+
+static inline const char *swipr_thread_state_name(enum swipr_thread_state state) {
+    switch (state) {
+        case swipr_thread_state_unknown: return "unknown";
+        case swipr_thread_state_running: return "running";
+        case swipr_thread_state_waiting: return "waiting";
+        case swipr_thread_state_uninterruptible: return "uninterruptible";
+        case swipr_thread_state_other: return "other";
+    }
+    return "unknown";
+}
+
 #endif /* common_h */

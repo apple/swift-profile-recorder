@@ -109,6 +109,26 @@ final class PerfScriptTests: XCTestCase {
         XCTAssertEqual(expected, String(buffer: actual))
     }
 
+    // The thread state is pprof-only: perf output is identical with or without it.
+    func testPerfScriptOutputIgnoresState() throws {
+        func render(state: String?) throws -> ByteBuffer {
+            var header = SampleHeader(pid: 1, tid: 2, name: "thread", timeSec: 4, timeNSec: 5)
+            header.state = state
+            let renderer = PerfScriptOutputRenderer()
+            return try renderer.consumeSingleSample(
+                Sample(
+                    sampleHeader: header,
+                    stack: [
+                        StackFrame(instructionPointer: 0x2345, stackPointer: .max)
+                    ]
+                ),
+                configuration: .default,
+                symbolizer: self.symbolizer
+            )
+        }
+        XCTAssertEqual(try render(state: nil), try render(state: "running"))
+    }
+
     // MARK: - Setup/teardown
     override func setUpWithError() throws {
         self.logger = Logger(label: "\(Self.self)")

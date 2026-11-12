@@ -791,6 +791,111 @@ final class ProfileRecorderTests: XCTestCase {
         try await done
     }
 
+    // The real sampler records each thread's state: a spinning thread reads as running, a blocked one as waiting.
+    func testThreadStatesAreRecorded() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let statesByThread = try await self.sampleSpinnerAndBlockerStates(mode: .wallTime)
+
+        // Tolerant bounds: a thread can miss a sample (its SIGPROF timed out).
+        let spinnerStates = try XCTUnwrap(statesByThread["swipr-spin"])
+        XCTAssertGreaterThanOrEqual(spinnerStates.count, 15)
+        XCTAssertGreaterThanOrEqual(
+            spinnerStates.filter { $0 == "running" }.count * 2,
+            spinnerStates.count,
+            "a spinning thread should mostly be running: \(spinnerStates)"
+        )
+
+        let blockerStates = try XCTUnwrap(statesByThread["swipr-block"])
+        #if canImport(Darwin)
+        XCTAssertGreaterThanOrEqual(
+            blockerStates.filter { $0 == "waiting" }.count,
+            15,
+            "a blocked thread should mostly be waiting: \(blockerStates)"
+        )
+        XCTAssertLessThanOrEqual(
+            blockerStates.filter { $0 == "running" }.count,
+            2,
+            "a blocked thread should almost never be running: \(blockerStates)"
+        )
+        #else
+        // Each sample's SIGPROF briefly wakes the blocker, and a loaded machine can catch it runnable before
+        // it's back asleep, so only require that it was seen waiting at all.
+        XCTAssert(blockerStates.contains("waiting"), "a blocked thread should be seen waiting: \(blockerStates)")
+        #endif
+    }
+
+    // In CPU mode only running threads are sampled, so every recorded state is "running".
+    func testCPUModeLabelsEverySampleRunning() async throws {
+        guard ProfileRecorderSampler.isSupportedPlatform else {
+            return
+        }
+
+        let statesByThread = try await self.sampleSpinnerAndBlockerStates(mode: .cpuTime)
+        // CPU mode only records threads it saw running, and the label comes from that same read.
+        XCTAssertNotNil(statesByThread["swipr-spin"], "a spinning thread should be sampled: \(statesByThread)")
+        XCTAssertEqual(Set(statesByThread.values.joined()), ["running"], "\(statesByThread)")
+    }
+
+    // Samples a spinning thread ("swipr-spin") and a blocked one ("swipr-block") 20 times; returns each thread's states.
+    private func sampleSpinnerAndBlockerStates(
+        mode: ProfileRecorderSamplingMode
+    ) async throws -> [String: [String]] {
+        let keepSpinning = ManagedAtomic(true)
+        let spinnerReady = DispatchSemaphore(value: 0)
+        let spinnerDone = DispatchSemaphore(value: 0)
+        let blockerReady = DispatchSemaphore(value: 0)
+        let blockerUnblock = DispatchSemaphore(value: 0)
+        let blockerDone = DispatchSemaphore(value: 0)
+
+        let spinner = Thread {
+            setCurrentThreadName("swipr-spin")
+            spinnerReady.signal()
+            while keepSpinning.load(ordering: .relaxed) {}
+            spinnerDone.signal()
+        }
+        let blocker = Thread {
+            setCurrentThreadName("swipr-block")
+            blockerReady.signal()
+            blockerUnblock.wait()
+            blockerDone.signal()
+        }
+        spinner.start()
+        blocker.start()
+        spinnerReady.wait()
+        blockerReady.wait()
+
+        let sampling = Result {
+            try ProfileRecorderSampler.sharedInstance.requestSamples(
+                outputFilePath: "\(self.tempDirectory!)/samples.samples",
+                count: 20,
+                timeBetweenSamples: .milliseconds(5),
+                mode: mode,
+                eventLoop: self.group.next()
+            ).wait()
+        }
+        keepSpinning.store(false, ordering: .relaxed)
+        blockerUnblock.signal()
+        spinnerDone.wait()
+        blockerDone.wait()
+        try sampling.get()
+
+        let sampleData = try await ByteBuffer(
+            contentsOf: FilePath("\(self.tempDirectory!)/samples.samples"),
+            maximumSizeAllowed: .mebibytes(32)
+        )
+        let smplPrefix = "[SWIPR] SMPL "
+        var statesByThread: [String: [String]] = [:]
+        for line in String(buffer: sampleData).split(separator: "\n") where line.hasPrefix(smplPrefix) {
+            let json = Data(line.dropFirst(smplPrefix.count).utf8)
+            let sample = Sample(sampleHeader: try JSONDecoder().decode(SampleHeader.self, from: json), stack: [])
+            statesByThread[sample.threadName, default: []].append(sample.threadState)
+        }
+        return statesByThread
+    }
+
     // MARK: - Setup/teardown
     override func setUp() {
         self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)

@@ -29,7 +29,11 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         let symbolisedStack = try sample.stack.map { frame in
             try symbolizer.symbolise(frame)
         }
-        let threadInfo = SampleAggregator.ThreadInfo(tid: sample.tid, name: sample.threadName)
+        let threadInfo = SampleAggregator.ThreadInfo(
+            tid: sample.tid,
+            name: sample.threadName,
+            state: sample.threadState
+        )
         self.aggregator.add(symbolisedStack, threadInfo: threadInfo)
         return ByteBuffer()
     }
@@ -54,8 +58,10 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
         // Thread label string table entries
         let threadIDKeyID = stringTable.addAndGetID("thread_id", type: StringWithID.self)
         let threadNameKeyID = stringTable.addAndGetID("thread_name", type: StringWithID.self)
+        let threadStateKeyID = stringTable.addAndGetID("thread_state", type: StringWithID.self)
         for sampleKey in self.aggregator.samples.keys {
             _ = stringTable.addAndGetID(sampleKey.threadInfo.name, type: StringWithID.self)
+            _ = stringTable.addAndGetID(sampleKey.threadInfo.state, type: StringWithID.self)
         }
 
         let profile = Perftools_Profiles_Profile.with { profile in
@@ -98,6 +104,16 @@ public struct PprofOutputRenderer: ProfileRecorderSampleConversionOutputRenderer
                             } else {
                                 assertionFailure(
                                     "thread name '\(sampleKey.threadInfo.name)' missing from string table"
+                                )
+                            }
+                        },
+                        Perftools_Profiles_Label.with {
+                            if let entry = stringTable[sampleKey.threadInfo.state] {
+                                $0.key = Int64(threadStateKeyID)
+                                $0.str = Int64(entry.id)
+                            } else {
+                                assertionFailure(
+                                    "thread state '\(sampleKey.threadInfo.state)' missing from string table"
                                 )
                             }
                         },
