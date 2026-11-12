@@ -791,8 +791,7 @@ final class ProfileRecorderTests: XCTestCase {
         try await done
     }
 
-    // The real sampler records each thread's state: a spinning thread reads as running, a blocked one as waiting
-    // (Darwin) or sleeping (Linux).
+    // The real sampler records each thread's state: a spinning thread reads as running, a blocked one as waiting.
     func testThreadStatesAreRecorded() async throws {
         guard ProfileRecorderSampler.isSupportedPlatform else {
             return
@@ -823,8 +822,8 @@ final class ProfileRecorderTests: XCTestCase {
         )
         #else
         // Each sample's SIGPROF briefly wakes the blocker, and a loaded machine can catch it runnable before
-        // it's back asleep, so only require that it was seen sleeping at all.
-        XCTAssert(blockerStates.contains("sleeping"), "a blocked thread should be seen sleeping: \(blockerStates)")
+        // it's back asleep, so only require that it was seen waiting at all.
+        XCTAssert(blockerStates.contains("waiting"), "a blocked thread should be seen waiting: \(blockerStates)")
         #endif
     }
 
@@ -843,7 +842,7 @@ final class ProfileRecorderTests: XCTestCase {
     // Samples a spinning thread ("swipr-spin") and a blocked one ("swipr-block") 20 times; returns each thread's states.
     private func sampleSpinnerAndBlockerStates(
         mode: ProfileRecorderSamplingMode
-    ) async throws -> [String: [String?]] {
+    ) async throws -> [String: [String]] {
         let keepSpinning = ManagedAtomic(true)
         let spinnerReady = DispatchSemaphore(value: 0)
         let spinnerDone = DispatchSemaphore(value: 0)
@@ -888,7 +887,7 @@ final class ProfileRecorderTests: XCTestCase {
             maximumSizeAllowed: .mebibytes(32)
         )
         let smplPrefix = "[SWIPR] SMPL "
-        var statesByThread: [String: [String?]] = [:]
+        var statesByThread: [String: [String]] = [:]
         for line in String(buffer: sampleData).split(separator: "\n") where line.hasPrefix(smplPrefix) {
             let json = Data(line.dropFirst(smplPrefix.count).utf8)
             let sample = Sample(sampleHeader: try JSONDecoder().decode(SampleHeader.self, from: json), stack: [])

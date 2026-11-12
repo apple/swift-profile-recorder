@@ -24,23 +24,25 @@ struct swipr_stackframe {
 
 struct swipr_minidump {
     pid_t md_pid;
+    enum swipr_thread_state md_thread_state;
     swipr_os_dep_thread_id md_tid;
+    // Darwin: the thread whose stack this slot held last tick, and its CPU time then.
+    swipr_os_dep_thread_id md_last_tid;
+    uint64_t md_last_cpu_ns;
 
     struct timespec md_time;
 
     size_t md_stack_depth;
     char md_thread_name[32];
-    enum swipr_thread_state md_thread_state;
     struct swipr_stackframe md_stack[SWIPR_MAX_STACK_DEPTH];
-
-    // Darwin: the thread whose stack this slot held last tick, and its CPU time then.
-    swipr_os_dep_thread_id md_last_tid;
-    uint64_t md_last_cpu_ns;
 };
 
 // The thread at index `i` must stay stopped for the whole call, or its stack changes under the walk.
-void swipr_sampler_unwind_thread(int i, struct swipr_minidump *minidump, const char *thread_name,
-                                 enum swipr_thread_state thread_state, struct timespec time);
+void swipr_sampler_unwind_thread(int i,
+                                 struct swipr_minidump *minidump,
+                                 const char *thread_name,
+                                 enum swipr_thread_state thread_state,
+                                 struct timespec time);
 
 static struct timespec
 swipr_sampler_get_current_time(void) {

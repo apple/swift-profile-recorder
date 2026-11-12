@@ -129,8 +129,11 @@ swipr_initialise_c2ms(FILE *output) {
 }
 
 void
-swipr_sampler_unwind_thread(int i, struct swipr_minidump *minidump, const char *thread_name,
-                            enum swipr_thread_state thread_state, struct timespec time) {
+swipr_sampler_unwind_thread(int i,
+                            struct swipr_minidump *minidump,
+                            const char *thread_name,
+                            enum swipr_thread_state thread_state,
+                            struct timespec time) {
     // Static: the cursor holds a 16k stack copy and only one sampler runs at a time; init sets all but the copy.
     static struct swipr_fp_unwinder_cursor cursor;
     swipr_fp_unwinder_init(&cursor, &g_swipr_c2ms.c2ms_c2ms[i].c2m_tiny_context);
@@ -335,18 +338,16 @@ swipr_request_sample(FILE *output,
                     "\"tid\": %lu, "
                     "\"name\": \"%s\", "
                     "\"timeSec\": %ld, "
-                    "\"timeNSec\": %ld",
+                    "\"timeNSec\": %ld, "
+                    "\"state\": \"%s\""
+                    "}\n",
                     minidump->md_pid,
                     (uintptr_t)minidump->md_tid,
                     minidump->md_thread_name,
                     minidump->md_time.tv_sec,
-                    minidump->md_time.tv_nsec
+                    minidump->md_time.tv_nsec,
+                    swipr_thread_state_name(minidump->md_thread_state)
                     );
-            const char *state_name = swipr_thread_state_name(minidump->md_thread_state);
-            if (state_name) {
-                fprintf(output, ", \"state\": \"%s\"", state_name);
-            }
-            fprintf(output, "}\n");
 
             swipr_write_stack(output, minidump, stack_buf, SWIPR_STACK_BUF_SIZE);
 

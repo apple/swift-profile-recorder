@@ -92,7 +92,7 @@ final class PprofTests: XCTestCase {
         )
         let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 1)
-        XCTAssertEqual(profile.sample[0].label.count, 2, "Should have thread_id and thread_name labels")
+        XCTAssertEqual(profile.sample[0].label.count, 3, "Should have thread_id, thread_name and thread_state labels")
 
         let nonZeroAddressLocations = profile.location.filter { $0.address != 0 }
         XCTAssertEqual(
@@ -206,7 +206,7 @@ final class PprofTests: XCTestCase {
         XCTAssertEqual(profile.sample.count, 1)
 
         let sample = profile.sample[0]
-        XCTAssertEqual(sample.label.count, 2)
+        XCTAssertEqual(sample.label.count, 3)
 
         let threadIDLabel = sample.label.first { profile.stringTable[Int($0.key)] == "thread_id" }
         XCTAssertNotNil(threadIDLabel)
@@ -262,7 +262,7 @@ final class PprofTests: XCTestCase {
     // Samples that differ only in thread state stay separate pprof samples, each counted on its own.
     func testPprofSameStackSameThreadDifferentState_NotAggregated() throws {
         let profile = try self.renderPprof(
-            ["running", "sleeping", "running"].map { state in
+            ["running", "waiting", "running"].map { state in
                 var header = SampleHeader(pid: 1, tid: 42, name: "worker", timeSec: 0, timeNSec: 0)
                 header.state = state
                 return header
@@ -273,42 +273,30 @@ final class PprofTests: XCTestCase {
             let stateLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" })
             valueByState[profile.stringTable[Int(stateLabel.str)]] = sample.value
         }
-        XCTAssertEqual(valueByState, ["running": [2], "sleeping": [1]])
+        XCTAssertEqual(valueByState, ["running": [2], "waiting": [1]])
     }
 
-    // In a mixed profile, only samples with a known state get a thread_state label, with the right value.
-    func testPprofThreadStateOnlyOnSamplesThatHaveOne() throws {
+    // In a mixed profile, every sample gets a thread_state label; one without a state is labelled "unknown".
+    func testPprofSampleWithoutStateIsLabelledUnknown() throws {
         var known = SampleHeader(pid: 1, tid: 1, name: "known", timeSec: 0, timeNSec: 0)
         known.state = "running"
         let profile = try self.renderPprof([
             known,
-            SampleHeader(pid: 1, tid: 2, name: "unknown", timeSec: 0, timeNSec: 0),
+            SampleHeader(pid: 1, tid: 2, name: "missing", timeSec: 0, timeNSec: 0),
         ])
-        var stateByThread: [String: String?] = [:]
+        var stateByThread: [String: String] = [:]
         for sample in profile.sample {
             let nameLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_name" })
-            let stateLabel = sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" }
-            XCTAssertEqual(sample.label.count, stateLabel == nil ? 2 : 3)
-            stateByThread.updateValue(
-                stateLabel.map { profile.stringTable[Int($0.str)] },
-                forKey: profile.stringTable[Int(nameLabel.str)]
-            )
+            let stateLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" })
+            XCTAssertEqual(sample.label.count, 3)
+            stateByThread[profile.stringTable[Int(nameLabel.str)]] = profile.stringTable[Int(stateLabel.str)]
         }
-        let expected: [String: String?] = ["known": "running", "unknown": nil]
-        XCTAssertEqual(stateByThread, expected)
-    }
-
-    // A profile with no thread states doesn't get a "thread_state" string, so its output stays as before.
-    func testPprofWithoutThreadStatesAddsNoThreadStateString() throws {
-        let profile = try self.renderPprof([
-            SampleHeader(pid: 1, tid: 1, name: "worker", timeSec: 0, timeNSec: 0)
-        ])
-        XCTAssertFalse(profile.stringTable.contains("thread_state"))
+        XCTAssertEqual(stateByThread, ["known": "running", "missing": "unknown"])
     }
 
     // End to end from raw sampler text to a pprof file: a SMPL record's "state" becomes a label, and a record
-    // without one gets none.
-    func testRawFileRoundTripLabelsOnlySamplesWithState() async throws {
+    // without one (written before the sampler recorded states) is labelled "unknown".
+    func testRawFileRoundTripLabelsMissingStateUnknown() async throws {
         // The shape the sampler writes: the first STCK of each sample is the signal handler's frame and gets
         // dropped.
         let raw = """
@@ -348,17 +336,13 @@ final class PprofTests: XCTestCase {
             )
         }
         XCTAssertEqual(profile.sample.count, 2)
-        var stateByThread: [String: String?] = [:]
+        var stateByThread: [String: String] = [:]
         for sample in profile.sample {
             let nameLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_name" })
-            let stateLabel = sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" }
-            stateByThread.updateValue(
-                stateLabel.map { profile.stringTable[Int($0.str)] },
-                forKey: profile.stringTable[Int(nameLabel.str)]
-            )
+            let stateLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" })
+            stateByThread[profile.stringTable[Int(nameLabel.str)]] = profile.stringTable[Int(stateLabel.str)]
         }
-        let expected: [String: String?] = ["runner": "running", "mystery": nil]
-        XCTAssertEqual(stateByThread, expected)
+        XCTAssertEqual(stateByThread, ["runner": "running", "mystery": "unknown"])
     }
 
     private func renderPprof(_ headers: [SampleHeader]) throws -> Perftools_Profiles_Profile {

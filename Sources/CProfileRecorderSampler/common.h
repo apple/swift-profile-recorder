@@ -41,44 +41,26 @@
 
 #define SWIPR_MIN(a, b) ((a) < (b) ? (a) : (b))
 
-// Scheduler state of a sampled thread. Linux reports the proc(5) states, read
-// when the thread list is built (right before signalling in CPU mode); Darwin
-// the mach run_state ones, read just before the thread is suspended.
+// Scheduler state of a sampled thread, named the same on Linux and Darwin. Linux reads it from
+// /proc/self/task/<tid>/stat when the thread list is built (right before signalling in CPU mode); Darwin from the
+// mach run_state, just before the thread is suspended.
 enum swipr_thread_state {
-    swipr_thread_state_unknown = 0,
-    swipr_thread_state_running,
-    swipr_thread_state_sleeping,
-    swipr_thread_state_disk_sleep,
-    swipr_thread_state_stopped,
-    swipr_thread_state_tracing_stop,
-    swipr_thread_state_zombie,
-    swipr_thread_state_dead,
-    swipr_thread_state_parked,
-    swipr_thread_state_idle,
-    swipr_thread_state_waiting,
-    swipr_thread_state_uninterruptible,
-    swipr_thread_state_halted,
+    swipr_thread_state_unknown = 0,     // not read: never set, or the read failed
+    swipr_thread_state_running,         // Linux R, Darwin RUNNING: on a CPU or runnable
+    swipr_thread_state_waiting,         // Linux S, Darwin WAITING: interruptible wait (lock, condvar, poll, sleep)
+    swipr_thread_state_uninterruptible, // Linux D, Darwin UNINTERRUPTIBLE: uninterruptible kernel wait, usually I/O
+    swipr_thread_state_other,           // read, but none of the above: stopped, traced, exiting, kernel-only
 };
 
-// NULL for swipr_thread_state_unknown, so an unknown state is left out of
-// the output rather than reported.
 static inline const char *swipr_thread_state_name(enum swipr_thread_state state) {
     switch (state) {
-        case swipr_thread_state_unknown: return NULL;
+        case swipr_thread_state_unknown: return "unknown";
         case swipr_thread_state_running: return "running";
-        case swipr_thread_state_sleeping: return "sleeping";
-        case swipr_thread_state_disk_sleep: return "disk-sleep";
-        case swipr_thread_state_stopped: return "stopped";
-        case swipr_thread_state_tracing_stop: return "tracing-stop";
-        case swipr_thread_state_zombie: return "zombie";
-        case swipr_thread_state_dead: return "dead";
-        case swipr_thread_state_parked: return "parked";
-        case swipr_thread_state_idle: return "idle";
         case swipr_thread_state_waiting: return "waiting";
         case swipr_thread_state_uninterruptible: return "uninterruptible";
-        case swipr_thread_state_halted: return "halted";
+        case swipr_thread_state_other: return "other";
     }
-    return NULL;
+    return "unknown";
 }
 
 #endif /* common_h */

@@ -288,11 +288,9 @@ int swipr_os_dep_sample_prepare(size_t num_threads, struct thread_info *all_thre
 static enum swipr_thread_state swipr_thread_state_from_run_state(integer_t run_state) {
     switch (run_state) {
         case TH_STATE_RUNNING: return swipr_thread_state_running;
-        case TH_STATE_STOPPED: return swipr_thread_state_stopped;
         case TH_STATE_WAITING: return swipr_thread_state_waiting;
         case TH_STATE_UNINTERRUPTIBLE: return swipr_thread_state_uninterruptible;
-        case TH_STATE_HALTED: return swipr_thread_state_halted;
-        default: return swipr_thread_state_unknown;
+        default: return swipr_thread_state_other;
     }
 }
 #endif

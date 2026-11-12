@@ -134,13 +134,14 @@ public struct SampleHeader: Codable {
         self.name = name
         self.timeSec = timeSec
         self.timeNSec = timeNSec
+        self.state = nil
     }
     var pid: Int
     var tid: Int
     var name: String
     var timeSec: Int
     var timeNSec: Int
-    var state: String?
+    var state: Optional<String>
 }
 
 public struct StackFrame: Codable & Sendable & CustomStringConvertible & Hashable {

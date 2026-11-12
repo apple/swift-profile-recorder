@@ -36,8 +36,9 @@ public struct Sample {
         return self.sampleHeader.name
     }
 
-    public var threadState: String? {
-        return self.sampleHeader.state
+    // Raw files written before the sampler recorded states have none, so they read as the sampler's "unknown".
+    public var threadState: String {
+        return self.sampleHeader.state ?? "unknown"
     }
 
     public init(sampleHeader: SampleHeader, stack: [StackFrame]) {
