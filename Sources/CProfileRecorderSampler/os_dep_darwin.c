@@ -226,7 +226,7 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
     thread_basic_info_data_t info;
     mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
     struct timespec start_time = swipr_sampler_get_current_time();
-    useconds_t sleep_time = 1;
+    useconds_t sleep_time_us = 1;
     float sleep_mult = 1.3;
     
     while (true) {
@@ -246,7 +246,7 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
         if (info.run_state == TH_STATE_UNINTERRUPTIBLE) {
             thread_abort(thread);
         }
-        usleep(sleep_time);
+        usleep(sleep_time_us);
         struct timespec current_time = swipr_sampler_get_current_time();
         float elapsed_seconds = (current_time.tv_sec - start_time.tv_sec) +
                                 (current_time.tv_nsec - start_time.tv_nsec) / 1e9f;
@@ -257,8 +257,8 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
             return 1;
         }
         
-        // update sleep_time, rounding up so it grows from 1
-        sleep_time = (useconds_t)(sleep_time * sleep_mult) + 1;
+        // update sleep_time_us, rounding up so it grows from 1
+        sleep_time_us = (useconds_t)(sleep_time_us * sleep_mult) + 1;
     }
     return 0;
 #else
