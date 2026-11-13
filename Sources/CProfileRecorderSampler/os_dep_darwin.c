@@ -25,6 +25,9 @@
 #include "os_dep.h"
 #include "asserts.h"
 
+// How long to wait for a suspended thread to stop running before abandoning it.
+#define SWIPR_SUSPEND_WAIT_TIMEOUT_SEC 1.0f
+
 // Fills `info` for a thread to sample; false for threads to skip. In CPU mode, threads already not running are skipped.
 // O(1) kernel lookups; pthread_from_mach_thread_np and pthread_getname_np walk all threads, O(n) each.
 static bool swipr_read_info_of_thread_to_sample(thread_t thread, enum swipr_sampling_mode mode, struct thread_info *info) {
@@ -226,7 +229,7 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
     thread_basic_info_data_t info;
     mach_msg_type_number_t count = THREAD_BASIC_INFO_COUNT;
     struct timespec start_time = swipr_sampler_get_current_time();
-    useconds_t sleep_time = 1;
+    useconds_t sleep_time_us = 1;
     float sleep_mult = 1.3;
     
     while (true) {
@@ -242,24 +245,23 @@ static int swipr_wait_for_thread_suspend(thread_act_t thread) {
         if (info.run_state == TH_STATE_WAITING) {
             return 0;
         }
-        // abort incase thread is uninterruptable
+        // abort in case thread is uninterruptible
         if (info.run_state == TH_STATE_UNINTERRUPTIBLE) {
             thread_abort(thread);
-            continue;
         }
-        usleep(sleep_time);
+        usleep(sleep_time_us);
         struct timespec current_time = swipr_sampler_get_current_time();
-        float duration = (current_time.tv_sec - start_time.tv_sec) +
-                         (current_time.tv_nsec - start_time.tv_nsec) / 1e9f;
+        float elapsed_seconds = (current_time.tv_sec - start_time.tv_sec) +
+                                (current_time.tv_nsec - start_time.tv_nsec) / 1e9f;
         
-        if (duration > SWIPR_NSEC_PER_SEC) {
+        if (elapsed_seconds > SWIPR_SUSPEND_WAIT_TIMEOUT_SEC) {
             // abandon thread
             UNSAFE_DEBUG("Thread timed out during suspension \n");
             return 1;
         }
         
-        // update sleep_time
-        sleep_time = (useconds_t) sleep_time * sleep_mult;
+        // update sleep_time_us, rounding up so it grows from 1
+        sleep_time_us = (useconds_t)(sleep_time_us * sleep_mult) + 1;
     }
     return 0;
 #else
