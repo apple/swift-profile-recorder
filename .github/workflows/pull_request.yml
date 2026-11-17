@@ -10,7 +10,7 @@ on:
 jobs:
   soundness:
     name: Soundness
-    uses: swiftlang/github-workflows/.github/workflows/soundness.yml@main
+    uses: swiftlang/github-workflows/.github/workflows/soundness.yml@0.0.18
     with:
       license_header_check_project_name: "Swift Profile Recorder"
       python_lint_check_enabled: false
@@ -19,7 +19,7 @@ jobs:
 
   swift-test:
     name: Run tests
-    uses: swiftlang/github-workflows/.github/workflows/swift_package_test.yml@main
+    uses: swiftlang/github-workflows/.github/workflows/swift_package_test.yml@0.0.18
     with:
       enable_linux_static_sdk_build: true
       linux_pre_build_command: "apt-get update && apt-get -yy install libc6-dbg && apt-get -yy install libc6-prof || true"
