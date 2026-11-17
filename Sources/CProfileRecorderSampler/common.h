@@ -42,8 +42,8 @@
 #define SWIPR_MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // Scheduler state of a sampled thread, named the same on Linux and Darwin. Linux reads it from
-// /proc/self/task/<tid>/stat when the thread list is built (right before signalling in CPU mode); Darwin from the
-// mach run_state, just before the thread is suspended.
+// /proc/self/task/<tid>/stat right before the thread is signalled; Darwin from the mach run_state, just before the
+// thread is suspended.
 enum swipr_thread_state {
     swipr_thread_state_unknown = 0,     // not read: never set, or the read failed
     swipr_thread_state_running,         // Linux R, Darwin RUNNING: on a CPU or runnable
