@@ -37,7 +37,8 @@ jobs:
     name: macOS tests
     uses: apple/swift-nio/.github/workflows/macos_tests.yml@main
     with:
-      runner_pool: nightly
+      # The nightly pool often takes hours to pick up a job, so only scheduled runs use it.
+      runner_pool: ${{ github.event_name == 'schedule' && 'nightly' || 'general' }}
       build_scheme: swift-profile-recorder-Package
       env_vars: "{\"PROTOBUF_NO_PROTOC\": \"true\"}"
 
