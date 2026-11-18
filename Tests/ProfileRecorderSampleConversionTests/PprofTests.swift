@@ -17,6 +17,7 @@ import XCTest
 import NIO
 import ProfileRecorder
 import ProfileRecorderPprofFormat
+import _NIOFileSystem
 
 @testable import _ProfileRecorderSampleConversion
 
@@ -91,7 +92,7 @@ final class PprofTests: XCTestCase {
         )
         let profile = try Perftools_Profiles_Profile(output)
         XCTAssertEqual(profile.sample.count, 1)
-        XCTAssertEqual(profile.sample[0].label.count, 2, "Should have thread_id and thread_name labels")
+        XCTAssertEqual(profile.sample[0].label.count, 3, "Should have thread_id, thread_name and thread_state labels")
 
         let nonZeroAddressLocations = profile.location.filter { $0.address != 0 }
         XCTAssertEqual(
@@ -205,7 +206,7 @@ final class PprofTests: XCTestCase {
         XCTAssertEqual(profile.sample.count, 1)
 
         let sample = profile.sample[0]
-        XCTAssertEqual(sample.label.count, 2)
+        XCTAssertEqual(sample.label.count, 3)
 
         let threadIDLabel = sample.label.first { profile.stringTable[Int($0.key)] == "thread_id" }
         XCTAssertNotNil(threadIDLabel)
@@ -256,6 +257,119 @@ final class PprofTests: XCTestCase {
             }
         )
         XCTAssertEqual(emittedNames, Set(threadNames))
+    }
+
+    // Samples that differ only in thread state stay separate pprof samples, each counted on its own.
+    func testPprofSameStackSameThreadDifferentState_NotAggregated() throws {
+        let profile = try self.renderPprof(
+            ["running", "waiting", "running"].map { state in
+                var header = SampleHeader(pid: 1, tid: 42, name: "worker", timeSec: 0, timeNSec: 0)
+                header.state = state
+                return header
+            }
+        )
+        var valueByState: [String: [Int64]] = [:]
+        for sample in profile.sample {
+            let stateLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" })
+            valueByState[profile.stringTable[Int(stateLabel.str)]] = sample.value
+        }
+        XCTAssertEqual(valueByState, ["running": [2], "waiting": [1]])
+    }
+
+    // In a mixed profile, every sample gets a thread_state label; one without a state is labelled "unknown".
+    func testPprofSampleWithoutStateIsLabelledUnknown() throws {
+        var known = SampleHeader(pid: 1, tid: 1, name: "known", timeSec: 0, timeNSec: 0)
+        known.state = "running"
+        let profile = try self.renderPprof([
+            known,
+            SampleHeader(pid: 1, tid: 2, name: "missing", timeSec: 0, timeNSec: 0),
+        ])
+        var stateByThread: [String: String] = [:]
+        for sample in profile.sample {
+            let nameLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_name" })
+            let stateLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" })
+            XCTAssertEqual(sample.label.count, 3)
+            stateByThread[profile.stringTable[Int(nameLabel.str)]] = profile.stringTable[Int(stateLabel.str)]
+        }
+        XCTAssertEqual(stateByThread, ["known": "running", "missing": "unknown"])
+    }
+
+    // End to end from raw sampler text to a pprof file: a SMPL record's "state" becomes a label, and a record
+    // without one (written before the sampler recorded states) is labelled "unknown".
+    func testRawFileRoundTripLabelsMissingStateUnknown() async throws {
+        // The shape the sampler writes: the first STCK of each sample is the signal handler's frame and gets
+        // dropped.
+        let raw = """
+            [SWIPR] VERS { "version": 1}
+            [SWIPR] VMAP {"path": "/lib/libfoo.so", "architecture": "arm64", "segmentSlide": "0x1000", \
+            "segmentStartAddress": "0x2000", "segmentEndAddress": "0x3000"}
+            [SWIPR] CONF { "sampleCount": 1, "microSecondsBetweenSamples": 10000, "currentTimeSeconds": 1, \
+            "currentTimeNanoseconds": 0, }
+            [SWIPR] SMPL {"pid": 1, "tid": 10, "name": "runner", "timeSec": 1, "timeNSec": 0, "state": "running"}
+            [SWIPR] STCK {"ip": "0x2100", "sp": "0x1"}
+            [SWIPR] STCK {"ip": "0x2345", "sp": "0x1"}
+            [SWIPR] DONE
+            [SWIPR] SMPL {"pid": 1, "tid": 11, "name": "mystery", "timeSec": 1, "timeNSec": 0}
+            [SWIPR] STCK {"ip": "0x2100", "sp": "0x1"}
+            [SWIPR] STCK {"ip": "0x2345", "sp": "0x1"}
+            [SWIPR] DONE
+
+            """
+        let profile = try await FileSystem.shared.withTemporaryDirectory { _, directory in
+            let rawPath = directory.appending("samples.raw")
+            let pprofPath = directory.appending("samples.pprof")
+            try await raw.write(toFileAt: rawPath)
+
+            let converter = ProfileRecorderSampleConverter(
+                config: .default,
+                renderer: PprofOutputRenderer(),
+                symbolizer: FakeSymbolizer()
+            )
+            try await converter.convert(
+                inputRawProfileRecorderFormatPath: rawPath.string,
+                outputPath: pprofPath.string,
+                format: .pprofSymbolized,
+                logger: self.logger
+            )
+            return try Perftools_Profiles_Profile(
+                try await ByteBuffer(contentsOf: pprofPath, maximumSizeAllowed: .mebibytes(32))
+            )
+        }
+        XCTAssertEqual(profile.sample.count, 2)
+        var stateByThread: [String: String] = [:]
+        for sample in profile.sample {
+            let nameLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_name" })
+            let stateLabel = try XCTUnwrap(sample.label.first { profile.stringTable[Int($0.key)] == "thread_state" })
+            stateByThread[profile.stringTable[Int(nameLabel.str)]] = profile.stringTable[Int(stateLabel.str)]
+        }
+        XCTAssertEqual(stateByThread, ["runner": "running", "mystery": "unknown"])
+    }
+
+    private func renderPprof(_ headers: [SampleHeader]) throws -> Perftools_Profiles_Profile {
+        var renderer = PprofOutputRenderer()
+        for header in headers {
+            let _ = try renderer.consumeSingleSample(
+                Sample(
+                    sampleHeader: header,
+                    stack: [
+                        StackFrame(instructionPointer: 0x2345, stackPointer: .max)
+                    ]
+                ),
+                configuration: .default,
+                symbolizer: self.symbolizer
+            )
+        }
+        let output = try renderer.finalise(
+            sampleConfiguration: SampleConfig(
+                currentTimeSeconds: 0,
+                currentTimeNanoseconds: 0,
+                microSecondsBetweenSamples: 0,
+                sampleCount: 0
+            ),
+            configuration: .default,
+            symbolizer: self.symbolizer
+        )
+        return try Perftools_Profiles_Profile(output)
     }
 
     // MARK: - Setup/teardown

@@ -44,7 +44,7 @@ struct os_dep_thread_info {
 };
 #else
 struct os_dep_thread_info {
-// empty for now
+    enum swipr_thread_state state; // from /proc/self/task/<tid>/stat, read right before the thread is signalled
 };
 #endif
 

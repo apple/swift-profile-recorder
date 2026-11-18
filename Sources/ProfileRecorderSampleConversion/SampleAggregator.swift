@@ -46,6 +46,7 @@ struct SampleAggregator: Sendable {
     struct ThreadInfo: Sendable, Hashable {
         var tid: Int
         var name: String
+        var state: String
     }
 
     struct SampleKey: Sendable, Hashable {
